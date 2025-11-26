@@ -1,9 +1,9 @@
 
 import React from 'react';
 import { 
-  X, Sun, Moon, Coffee, Minus, Plus, AlignLeft, AlignJustify, Target, Sparkles, Layers, EyeOff, Clock
+  X, Sun, Moon, Coffee, Minus, Plus, AlignLeft, AlignJustify, Target, Sparkles, Layers, EyeOff, Clock, Languages
 } from 'lucide-react';
-import { ReaderSettings, ThemeType, FontFamily } from '../types';
+import { ReaderSettings, ThemeType, FontFamily, AILanguage } from '../types';
 import { THEMES, FONT_LABELS, FONT_FAMILIES } from '../constants';
 
 interface ControlPanelProps {
@@ -282,27 +282,58 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
               </div>
 
               {/* AI Mode */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                   <Sparkles className="w-4 h-4 text-amber-500" />
-                   <span>AI Companion</span>
-                </div>
-                <button
-                  onClick={() => onUpdateSettings({ aiMode: !settings.aiMode })}
-                  className={`
-                    relative inline-flex h-6 w-11 items-center rounded-full transition-colors
-                    ${settings.aiMode ? 'bg-amber-500' : 'bg-gray-300'}
-                  `}
-                >
-                  <span
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                     <Sparkles className="w-4 h-4 text-amber-500" />
+                     <span>AI Context Menu</span>
+                  </div>
+                  <button
+                    onClick={() => onUpdateSettings({ aiMode: !settings.aiMode })}
                     className={`
-                      inline-block h-4 w-4 transform rounded-full bg-white transition-transform
-                      ${settings.aiMode ? 'translate-x-6' : 'translate-x-1'}
+                      relative inline-flex h-6 w-11 items-center rounded-full transition-colors
+                      ${settings.aiMode ? 'bg-amber-500' : 'bg-gray-300'}
                     `}
-                  />
-                </button>
+                  >
+                    <span
+                      className={`
+                        inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                        ${settings.aiMode ? 'translate-x-6' : 'translate-x-1'}
+                      `}
+                    />
+                  </button>
+                </div>
+
+                {settings.aiMode && (
+                  <div className="pl-6 pr-1 space-y-2 animate-in slide-in-from-top-2 duration-200">
+                    <div className="flex justify-between text-xs opacity-70">
+                       <span className="flex items-center gap-1"><Languages className="w-3 h-3" /> Output Language</span>
+                    </div>
+                    <div className={`flex p-1 rounded-lg ${themeStyles.active}`}>
+                       {[
+                         { value: 'auto', label: 'Auto' },
+                         { value: 'zh', label: '中文' },
+                         { value: 'en', label: 'Eng' },
+                       ].map((lang) => (
+                         <button
+                           key={lang.value}
+                           onClick={() => onUpdateSettings({ aiLanguage: lang.value as AILanguage })}
+                           className={`
+                             flex-1 py-1.5 text-xs font-medium rounded-md transition-all
+                             ${settings.aiLanguage === lang.value ? 'bg-white shadow-sm text-gray-900' : 'opacity-50'}
+                           `}
+                         >
+                           {lang.label}
+                         </button>
+                       ))}
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-xs opacity-60">
+                   Select text and right-click to trigger AI explanations and translations.
+                </p>
               </div>
-              <p className="text-xs opacity-60">Unlock context by clicking underlined terms.</p>
 
             </div>
           </section>

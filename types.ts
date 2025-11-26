@@ -16,6 +16,8 @@ export enum FontFamily {
   KAITI = 'kaiti',   // 楷体
 }
 
+export type AILanguage = 'auto' | 'zh' | 'en';
+
 export interface ReaderSettings {
   theme: ThemeType;
   fontSize: number;
@@ -28,6 +30,7 @@ export interface ReaderSettings {
   focusMode: boolean; 
   focusParagraphCount: number; // Number of paragraphs to highlight
   aiMode: boolean; // New AI Companion Mode
+  aiLanguage: AILanguage; // Language for AI definitions
 }
 
 export interface Chapter {
@@ -50,9 +53,5 @@ export interface BookData {
 
 export interface AIEntityData {
   term: string;
-  summary: string; // 一句话总结 (for Tooltip)
-  concise: string; // 精要解释
-  background: string; // 背景知识
-  wiki: string; // Wiki content
-  extended: string[]; // 延伸阅读
+  definition: string;
 }

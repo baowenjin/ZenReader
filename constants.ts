@@ -1,5 +1,5 @@
 
-import { ThemeType, FontFamily, AIEntityData } from './types';
+import { ThemeType, FontFamily } from './types';
 
 // Centralized Color Definitions for JS + Tailwind usage
 export const THEME_COLORS = {
@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS = {
   focusMode: false,
   focusParagraphCount: 1, 
   aiMode: true,
+  aiLanguage: 'auto' as const,
 };
 
 export const CHARS_PER_PAGE_ESTIMATE = 2000;
@@ -43,7 +44,7 @@ export const THEMES = {
     hover: 'hover:bg-gray-200',
     active: 'bg-gray-200',
     dimmed: 'text-gray-300',
-    highlight: 'border-blue-400 text-blue-600',
+    highlight: 'border-gray-400 text-gray-900', // Neutral underline
   },
   [ThemeType.SEPIA]: {
     // Using arbitrary values to match THEME_COLORS exactly
@@ -55,7 +56,7 @@ export const THEMES = {
     hover: 'hover:bg-[#E6E2D8]',
     active: 'bg-[#E6E2D8]',
     dimmed: 'text-[#B0A89E]',
-    highlight: 'border-[#8C857B] text-[#5C554B]',
+    highlight: 'border-[#8C857B] text-[#2D2926]',
   },
   [ThemeType.DARK]: {
     bg: 'bg-[#1a1a1a]',
@@ -66,7 +67,7 @@ export const THEMES = {
     hover: 'hover:bg-gray-700',
     active: 'bg-gray-700',
     dimmed: 'text-[#444]',
-    highlight: 'border-blue-400 text-blue-300',
+    highlight: 'border-gray-500 text-gray-200',
   },
 };
 
@@ -89,47 +90,4 @@ export const FONT_FAMILIES = {
   [FontFamily.HEITI]: 'Inter, "PingFang SC", "Microsoft YaHei", "SimHei", "Heiti SC", sans-serif',
   [FontFamily.SONGTI]: 'Merriweather, Georgia, "SimSun", "STSong", "Songti SC", serif',
   [FontFamily.KAITI]: 'Lora, "KaiTi", "STKaiti", "KaiTi_GB2312", serif',
-};
-
-export const MOCK_AI_KNOWLEDGE_BASE: Record<string, AIEntityData> = {
-  "Dursley": {
-    term: "Dursley",
-    summary: "The non-magical relatives of Harry Potter.",
-    concise: "The Dursley family are Harry Potter's only living relatives. They live at 4 Privet Drive and despise anything related to magic.",
-    background: "Mr. Vernon Dursley and Mrs. Petunia Dursley pride themselves on being perfectly normal. They took Harry in after his parents died but treated him poorly.",
-    wiki: "The Dursley family are fictional characters in the Harry Potter series...",
-    extended: ["Vernon Dursley", "Petunia Dursley", "Dudley Dursley"]
-  },
-  "Privet Drive": {
-    term: "Privet Drive",
-    summary: "The street where the Dursleys live.",
-    concise: "A suburban street in Little Whinging, Surrey, England, where Harry Potter lived with his aunt and uncle.",
-    background: "It represents the mundane, conformist world of the Dursleys, contrasting sharply with the magical world.",
-    wiki: "Privet Drive is a street in the fictional town of Little Whinging...",
-    extended: ["Harry Potter Locations", "Little Whinging"]
-  },
-  "Grunnings": {
-    term: "Grunnings",
-    summary: "Drill manufacturing company.",
-    concise: "The company where Vernon Dursley works as a director.",
-    background: "Grunnings makes drills. It emphasizes Vernon's boring, normal, and successful middle-class life.",
-    wiki: "Grunnings is a drill manufacturing company in the Harry Potter universe...",
-    extended: ["Vernon Dursley", "Drills"]
-  },
-  "Muggle": {
-    term: "Muggle",
-    summary: "Non-magical person.",
-    concise: "A person who lacks any sort of magical ability and was not born in a magical family.",
-    background: "The term is used by wizards to describe ordinary humans.",
-    wiki: "In the Harry Potter series, a Muggle is a person who lacks any sort of magical ability...",
-    extended: ["Magic", "Wizarding World"]
-  },
-  "Potter": {
-    term: "Potter",
-    summary: "Refers to Harry Potter or his family.",
-    concise: "The surname of the protagonist, Harry Potter, a wizard who survived Lord Voldemort's attack as a baby.",
-    background: "The Potters were a pure-blood wizarding family, though Harry is a half-blood. They were killed by Voldemort.",
-    wiki: "The Potter family is a fictional wizarding family...",
-    extended: ["Harry Potter", "James Potter", "Lily Potter"]
-  }
 };
