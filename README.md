@@ -1,4 +1,3 @@
-```markdown
 # ZenReader — 极致沉浸的本地私有阅读器（AI 伴读 / EPUB / PDF / 开源免费）
 
 > 📖 **你的私人阅读空间。无账号、无云端、零泄漏，完全由你掌控。**
@@ -54,7 +53,7 @@ ZenReader 是一款基于 **纯前端 + 本地文件系统** 的现代阅读器�
 
 ```
 
-[https://zenreader.your-domain.com](https://zenreader.your-domain.com)
+[[https://zenreader.your-domain.com](https://zenreader.your-domain.com)](https://zen-reader.vercel.app)
 
 ````
 
