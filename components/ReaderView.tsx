@@ -252,6 +252,7 @@ const PdfRenderer = ({
   onLoad: (meta: { width: number, height: number, numPages: number }) => void
 }) => {
   const [pdf, setPdf] = useState<any>(null);
+  const [initialScrollDone, setInitialScrollDone] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -271,11 +272,63 @@ const PdfRenderer = ({
     load();
   }, [data]);
 
-  if (!pdf) return <div className="py-20 flex justify-center"><Loader2 className="animate-spin w-8 h-8 opacity-50"/></div>;
-
   const mode = settings.pdfViewMode || 'single';
 
-  // SCROLL MODE
+  // --- SCROLL MODE LOGIC ---
+
+  // 1. Initial Scroll Restoration
+  useEffect(() => {
+    if (mode === 'scroll' && pdf && !initialScrollDone) {
+        // Wait a tick for rendering
+        const timer = setTimeout(() => {
+          const el = document.querySelector(`div[data-page="${pageIndex}"]`);
+          if (el) {
+              console.log("Restoring PDF position to page", pageIndex);
+              el.scrollIntoView({ block: 'start' });
+              setInitialScrollDone(true);
+          }
+        }, 150);
+        return () => clearTimeout(timer);
+    }
+  }, [pdf, mode, initialScrollDone]); // Intentionally not depending on pageIndex to avoid jumping on updates
+
+  // 2. Scroll Spy for Progress Tracking
+  useEffect(() => {
+    if (mode !== 'scroll' || !pdf) return;
+
+    let timeout: number;
+    const handleScroll = () => {
+       const pageDivs = document.querySelectorAll('div[data-page]');
+       let activePage = 0;
+       
+       // Find the first page whose bottom is significantly into the viewport
+       for (const div of pageDivs) {
+           const rect = div.getBoundingClientRect();
+           // If the page is mostly visible or at the top
+           if (rect.bottom > 200) { 
+               activePage = parseInt(div.getAttribute('data-page') || '0');
+               break;
+           }
+       }
+       onPageVisible(activePage);
+    };
+
+    const onScroll = () => {
+        if (timeout) return;
+        timeout = window.setTimeout(() => {
+            handleScroll();
+            timeout = 0;
+        }, 500); // Throttle to 500ms to avoid DB spam
+    };
+
+    window.addEventListener('scroll', onScroll);
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [mode, pdf, onPageVisible]);
+
+
+  if (!pdf) return <div className="py-20 flex justify-center"><Loader2 className="animate-spin w-8 h-8 opacity-50"/></div>;
+
+  // SCROLL MODE RENDER
   if (mode === 'scroll') {
       return (
         <div className="w-full flex flex-col gap-6 pb-32 items-center">
@@ -287,7 +340,7 @@ const PdfRenderer = ({
                   scale={scale} 
                   theme={theme}
                   isScrollMode={true}
-                  onVisible={() => onPageVisible(i)}
+                  // We remove onVisible here because the global scroll spy handles it better for continuous mode
                 />
                 <div className="text-center text-[10px] text-gray-400 mt-2">{i + 1}</div>
              </div>
@@ -807,10 +860,12 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   };
 
   const handlePdfPageVisible = useCallback((pageIdx: number) => {
-      if (Math.abs(book.currentPageIndex - pageIdx) > 0) {
-          // Logic for updating progress silently could go here
+      // Logic for updating progress. The throttle logic is inside PdfRenderer,
+      // so we just call the prop function here.
+      if (book.currentPageIndex !== pageIdx) {
+          onPageChange(pageIdx);
       }
-  }, [book.currentPageIndex]);
+  }, [book.currentPageIndex, onPageChange]);
 
   if (!currentChapter && !isPdf) return null;
 
@@ -894,7 +949,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
              {/* Page Count */}
              <div>
                {isPdf && settings.pdfViewMode === 'scroll' 
-                  ? 'SCROLL' 
+                  ? `${book.currentPageIndex + 1}/${totalUnits}` 
                   : isPdf 
                   ? `${book.currentPageIndex + 1}/${totalUnits}` 
                   : `${progress}%`
