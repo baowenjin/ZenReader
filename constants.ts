@@ -9,8 +9,8 @@ export const THEME_COLORS = {
     uiBg: '#f9fafb', // gray-50
   },
   [ThemeType.SEPIA]: {
-    bg: '#FAF9F6', // Off-white / Cream (much less yellow)
-    uiBg: '#F2F0E9', // Slightly darker warm grey for UI distinction
+    bg: '#f4ecd8', // Warm Parchment (Eye-friendly)
+    uiBg: '#e8dec5', // Slightly darker parchment for UI
   },
   [ThemeType.DARK]: {
     bg: '#1a1a1a',
@@ -31,6 +31,7 @@ export const DEFAULT_SETTINGS = {
   focusParagraphCount: 1, 
   aiMode: true,
   aiLanguage: 'auto' as const,
+  apiKey: '', // Default empty, user must provide
   
   // PDF Defaults
   pdfViewMode: 'single' as const,
@@ -53,16 +54,16 @@ export const THEMES = {
     highlight: 'border-gray-400 text-gray-900', // Neutral underline
   },
   [ThemeType.SEPIA]: {
-    // Using arbitrary values to match THEME_COLORS exactly
-    bg: 'bg-[#FAF9F6]', 
-    text: 'text-[#2D2926]', // Sharp dark charcoal/brown for better contrast
-    uiBg: 'bg-[#F2F0E9]', // Distinct from content
-    border: 'border-[#E6E2D8]',
-    icon: 'text-[#8C857B]',
-    hover: 'hover:bg-[#E6E2D8]',
-    active: 'bg-[#E6E2D8]',
-    dimmed: 'text-[#B0A89E]',
-    highlight: 'border-[#8C857B] text-[#2D2926]',
+    // Eye-friendly Parchment Theme
+    bg: 'bg-[#f4ecd8]', 
+    text: 'text-[#4a4238]', // Warm dark brown/gray (Softer than black)
+    uiBg: 'bg-[#e8dec5]', // Distinct from content
+    border: 'border-[#d6c8b0]',
+    icon: 'text-[#8c7b60]',
+    hover: 'hover:bg-[#d6c8b0]',
+    active: 'bg-[#d6c8b0]',
+    dimmed: 'text-[#a89b85]',
+    highlight: 'border-[#8c7b60] text-[#2c241b]',
   },
   [ThemeType.DARK]: {
     bg: 'bg-[#1a1a1a]',

@@ -35,6 +35,7 @@ export interface ReaderSettings {
   focusParagraphCount: number; // Number of paragraphs to highlight
   aiMode: boolean; // New AI Companion Mode
   aiLanguage: AILanguage; // Language for AI definitions
+  apiKey?: string; // User provided API Key for Gemini
   
   // PDF Specific
   pdfViewMode: PdfViewMode;

@@ -1,4 +1,5 @@
 
+
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Settings, ArrowLeft, ArrowRight, List, Target, Sparkles, X, ChevronLeft, ChevronRight, Loader2, Languages, Copy, StickyNote, Scan, Scaling, Minus, Plus, Maximize, Columns, File, Scroll, Cloud, CheckCircle2, AlertCircle } from 'lucide-react';
 import { BookData, ReaderSettings, AIEntityData, PdfViewMode, PdfFitMode } from '../types';
@@ -373,7 +374,7 @@ const Paragraph = React.memo(({
       containerClass += " opacity-100 scale-[1.01] my-10"; // Highlight
       textClass += isHeading ? "" : " font-medium";
     } else {
-      containerClass += " opacity-10 blur-[1.5px] grayscale my-10"; // Dim others
+      containerClass += " opacity-1 blur-[1.5px] grayscale my-10"; // Dim others
     }
   }
 
@@ -548,17 +549,19 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     });
     
     // 3. Call AI
-    if (!process.env.API_KEY) {
+    const apiKey = settings.apiKey;
+    
+    if (!apiKey) {
        setActiveEntity(prev => prev ? {
            ...prev,
-           data: { ...prev.data, definition: "API Key not configured." },
+           data: { ...prev.data, definition: "API Key not configured. Please set it in Settings." },
            isLoading: false
        } : null);
        return;
     }
 
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenAI({ apiKey: apiKey });
         
         let prompt = "";
         const langInstruction = settings.aiLanguage === 'zh' 

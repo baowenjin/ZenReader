@@ -3,7 +3,7 @@
 import React from 'react';
 import { 
   X, Sun, Moon, Coffee, Minus, Plus, AlignLeft, AlignJustify, Target, Sparkles, Layers, EyeOff, Clock, Languages,
-  Scroll, File, BookOpen, ZoomIn, ZoomOut, RotateCcw
+  Scroll, File, BookOpen, ZoomIn, ZoomOut, RotateCcw, Key
 } from 'lucide-react';
 import { ReaderSettings, ThemeType, FontFamily, AILanguage, PdfViewMode } from '../types';
 import { THEMES, FONT_LABELS, FONT_FAMILIES } from '../constants';
@@ -380,27 +380,54 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                   </div>
 
                   {settings.aiMode && (
-                    <div className="pl-6 pr-1 space-y-2 animate-in slide-in-from-top-2 duration-200">
-                      <div className="flex justify-between text-xs opacity-70">
-                         <span className="flex items-center gap-1"><Languages className="w-3 h-3" /> Output Language</span>
+                    <div className="pl-6 pr-1 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                      {/* Language Selection */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs opacity-70">
+                          <span className="flex items-center gap-1"><Languages className="w-3 h-3" /> Output Language</span>
+                        </div>
+                        <div className={`flex p-1 rounded-lg ${themeStyles.active}`}>
+                          {[
+                            { value: 'auto', label: 'Auto' },
+                            { value: 'zh', label: '中文' },
+                            { value: 'en', label: 'Eng' },
+                          ].map((lang) => (
+                            <button
+                              key={lang.value}
+                              onClick={() => onUpdateSettings({ aiLanguage: lang.value as AILanguage })}
+                              className={`
+                                flex-1 py-1.5 text-xs font-medium rounded-md transition-all
+                                ${settings.aiLanguage === lang.value ? 'bg-white shadow-sm text-gray-900' : 'opacity-50'}
+                              `}
+                            >
+                              {lang.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <div className={`flex p-1 rounded-lg ${themeStyles.active}`}>
-                         {[
-                           { value: 'auto', label: 'Auto' },
-                           { value: 'zh', label: '中文' },
-                           { value: 'en', label: 'Eng' },
-                         ].map((lang) => (
-                           <button
-                             key={lang.value}
-                             onClick={() => onUpdateSettings({ aiLanguage: lang.value as AILanguage })}
-                             className={`
-                               flex-1 py-1.5 text-xs font-medium rounded-md transition-all
-                               ${settings.aiLanguage === lang.value ? 'bg-white shadow-sm text-gray-900' : 'opacity-50'}
-                             `}
-                           >
-                             {lang.label}
-                           </button>
-                         ))}
+
+                      {/* API Key Input */}
+                      <div className="pt-2">
+                         <div className="flex justify-between text-xs opacity-70 mb-1.5">
+                            <span className="flex items-center gap-1"><Key className="w-3 h-3" /> Gemini API Key</span>
+                         </div>
+                         <input 
+                            type="password" 
+                            value={settings.apiKey || ''}
+                            onChange={(e) => onUpdateSettings({ apiKey: e.target.value })}
+                            placeholder="Paste API Key here..."
+                            className={`
+                              w-full px-3 py-2 rounded-md text-xs
+                              bg-transparent border ${themeStyles.border} 
+                              focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none
+                              transition-all
+                            `}
+                         />
+                         <div className="text-[10px] mt-1 opacity-50 text-right">
+                           <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="hover:underline hover:text-blue-500">
+                             Get Key →
+                           </a>
+                         </div>
                       </div>
                     </div>
                   )}
