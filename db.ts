@@ -1,9 +1,7 @@
-
-
 import { BookData } from './types';
 
 const DB_NAME = 'ZenReaderDB';
-const DB_VERSION = 3; // Bumped for handles store
+const DB_VERSION = 4; // Bumped version to ensure stores are created if missing
 const STORE_NAME = 'books';
 const HANDLE_STORE_NAME = 'handles';
 
@@ -18,10 +16,13 @@ export const initDB = (): Promise<void> => {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
+      
+      // Ensure 'books' store exists
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
       }
-      // Store for FileSystemHandles
+      
+      // Ensure 'handles' store exists
       if (!db.objectStoreNames.contains(HANDLE_STORE_NAME)) {
         db.createObjectStore(HANDLE_STORE_NAME);
       }
@@ -128,7 +129,6 @@ export const saveDirectoryHandle = (handle: any): Promise<void> => {
     request.onsuccess = () => {
        const db = request.result;
        const tx = db.transaction(HANDLE_STORE_NAME, 'readwrite');
-       // We use a fixed key 'syncDir' since we only support one sync folder
        tx.objectStore(HANDLE_STORE_NAME).put(handle, 'syncDir');
        tx.oncomplete = () => resolve();
        tx.onerror = () => reject('Failed to save handle');

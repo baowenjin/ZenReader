@@ -61,6 +61,7 @@ export interface BookData {
   coverImage?: string; // Base64 string for the cover
   pdfArrayBuffer?: ArrayBuffer; // Stored PDF binary for native rendering
   pageCount?: number; // Total pages for PDF
+  filename?: string; // Original filename for file system operations
 }
 
 export interface AIEntityData {

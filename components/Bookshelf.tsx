@@ -1,7 +1,5 @@
-
-
 import React, { useRef, useState, useEffect } from 'react';
-import { Plus, Search, Trash2, FolderInput, Download, ChevronDown, FileText, FileUp, FileDown, Cloud, CloudLightning, RefreshCw } from 'lucide-react';
+import { Plus, Search, Trash2, FolderInput, Download, ChevronDown, FileText, FileUp, FileDown, Cloud, RefreshCw, Check } from 'lucide-react';
 import { BookData } from '../types';
 import { calculateProgress } from '../utils';
 
@@ -13,7 +11,7 @@ interface BookshelfProps {
   onImportFolder: () => void;
   onExportBackup: () => void;
   onRestoreBackup: (file: File) => void;
-  onDeleteBook: (id: string) => void;
+  onDeleteBooks: (ids: string[], deleteLocal: boolean) => void;
   onConnectSync: () => void;
   onReconnectSync: () => void;
   isSyncConnected: boolean;
@@ -29,7 +27,7 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
   onImportFolder,
   onExportBackup,
   onRestoreBackup,
-  onDeleteBook,
+  onDeleteBooks,
   onConnectSync,
   onReconnectSync,
   isSyncConnected,
@@ -40,6 +38,18 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
   const backupInputRef = useRef<HTMLInputElement>(null);
   const importMenuRef = useRef<HTMLDivElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  
+  // Selection State
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [initialSelection, setInitialSelection] = useState<Set<string>>(new Set());
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectionBox, setSelectionBox] = useState<{ startX: number, startY: number, currentX: number, currentY: number } | null>(null);
+
+  // Delete Modal State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteLocalFiles, setDeleteLocalFiles] = useState(false);
+  const [idsToDelete, setIdsToDelete] = useState<string[]>([]);
   
   const [activeTab, setActiveTab] = useState('默认');
   const [searchQuery, setSearchQuery] = useState('');
@@ -99,7 +109,111 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
     if (e.target) e.target.value = '';
   };
 
-  // Sync Status UI Logic
+  // --- MOUSE SELECTION LOGIC ---
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // Only start selection if clicking on the background (not a book or button)
+    if (e.target === containerRef.current || (e.target as HTMLElement).classList.contains('selection-zone')) {
+      e.preventDefault();
+      setIsSelecting(true);
+      
+      const startX = e.clientX;
+      const startY = e.clientY;
+      setSelectionBox({ startX, startY, currentX: startX, currentY: startY });
+
+      // If holding Shift/Ctrl, keep existing selection as base
+      if (e.shiftKey || e.ctrlKey || e.metaKey) {
+        setInitialSelection(new Set(selectedIds));
+      } else {
+        setInitialSelection(new Set());
+        setSelectedIds(new Set());
+      }
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isSelecting || !selectionBox) return;
+    
+    setSelectionBox(prev => prev ? ({ ...prev, currentX: e.clientX, currentY: e.clientY }) : null);
+    
+    // Calculate selection rect
+    const left = Math.min(selectionBox.startX, e.clientX);
+    const top = Math.min(selectionBox.startY, e.clientY);
+    const width = Math.abs(e.clientX - selectionBox.startX);
+    const height = Math.abs(e.clientY - selectionBox.startY);
+    const selectRect = { left, top, right: left + width, bottom: top + height };
+
+    // Start with the selection state from before drag started
+    const nextSelection = new Set(initialSelection);
+    
+    // Check intersections
+    const booksElements = document.querySelectorAll('[data-book-id]');
+    booksElements.forEach((el) => {
+        const rect = el.getBoundingClientRect();
+        const id = el.getAttribute('data-book-id');
+        if (!id) return;
+
+        const isIntersecting = !(rect.right < selectRect.left || 
+                               rect.left > selectRect.right || 
+                               rect.bottom < selectRect.top || 
+                               rect.top > selectRect.bottom);
+        
+        if (isIntersecting) {
+            nextSelection.add(id);
+        }
+    });
+
+    setSelectedIds(nextSelection);
+  };
+
+  const handleMouseUp = () => {
+    setIsSelecting(false);
+    setSelectionBox(null);
+  };
+
+  useEffect(() => {
+    if (isSelecting) {
+      window.addEventListener('mouseup', handleMouseUp);
+      // Also add mousemove to window to catch fast movements outside container
+      window.addEventListener('mousemove', handleMouseMove as any);
+    }
+    return () => {
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mousemove', handleMouseMove as any);
+    };
+  }, [isSelecting, selectionBox, initialSelection]); // Add dependencies needed for handler
+
+  const toggleSelection = (id: string, multi: boolean) => {
+    const newSet = new Set(multi ? selectedIds : []);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  // --- DELETE LOGIC ---
+  const requestDelete = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    
+    if (selectedIds.has(id)) {
+       setIdsToDelete(Array.from(selectedIds));
+    } else {
+       setIdsToDelete([id]);
+    }
+    
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = () => {
+    onDeleteBooks(idsToDelete, deleteLocalFiles);
+    setShowDeleteModal(false);
+    setSelectedIds(new Set());
+    setIdsToDelete([]);
+    setDeleteLocalFiles(false);
+  };
+
+  // --- SYNC UI ---
   let syncStatusUI;
   if (isSyncConnected) {
       syncStatusUI = (
@@ -109,7 +223,6 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
           </div>
       );
   } else if (hasSyncHandle) {
-      // We have a handle but not connected (need permission)
       syncStatusUI = (
           <button 
              onClick={onReconnectSync}
@@ -120,7 +233,6 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
           </button>
       );
   } else {
-      // No sync set up
       // @ts-ignore
       const showSyncButton = !!window.showDirectoryPicker;
       if (showSyncButton) {
@@ -138,8 +250,72 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
       }
   }
 
+  const selectionStyle: React.CSSProperties | undefined = selectionBox ? {
+    position: 'fixed',
+    left: Math.min(selectionBox.startX, selectionBox.currentX),
+    top: Math.min(selectionBox.startY, selectionBox.currentY),
+    width: Math.abs(selectionBox.currentX - selectionBox.startX),
+    height: Math.abs(selectionBox.currentY - selectionBox.startY),
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    border: '1px solid rgba(59, 130, 246, 0.8)',
+    pointerEvents: 'none',
+    zIndex: 9999
+  } : undefined;
+
   return (
-    <div className="min-h-screen bg-[#f8f9fa] text-gray-900 pb-20 font-sans">
+    <div 
+      className="min-h-screen bg-[#f8f9fa] text-gray-900 pb-20 font-sans select-none"
+      onMouseDown={handleMouseDown}
+    >
+      {/* Selection Box Visual */}
+      {isSelecting && selectionBox && <div style={selectionStyle} />}
+
+      {/* Delete Modal */}
+      {showDeleteModal && (
+         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowDeleteModal(false)} />
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 relative z-10 animate-in fade-in zoom-in-95 duration-200">
+               <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Books?</h3>
+               <p className="text-gray-600 text-sm mb-6">
+                 Are you sure you want to delete <span className="font-bold text-gray-900">{idsToDelete.length}</span> book{idsToDelete.length > 1 ? 's' : ''}?
+                 This action cannot be undone.
+               </p>
+               
+               {isSyncConnected && (
+                 <label className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 bg-gray-50 mb-6 cursor-pointer hover:bg-gray-100 transition-colors">
+                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${deleteLocalFiles ? 'bg-blue-500 border-blue-500' : 'bg-white border-gray-300'}`}>
+                      {deleteLocalFiles && <Check className="w-3.5 h-3.5 text-white" />}
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      className="hidden" 
+                      checked={deleteLocalFiles} 
+                      onChange={(e) => setDeleteLocalFiles(e.target.checked)} 
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-gray-900">Delete local files</div>
+                      <div className="text-xs text-gray-500">Remove from sync folder</div>
+                    </div>
+                 </label>
+               )}
+
+               <div className="flex gap-3">
+                 <button 
+                   onClick={() => setShowDeleteModal(false)}
+                   className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                 >
+                   Cancel
+                 </button>
+                 <button 
+                   onClick={confirmDelete}
+                   className="flex-1 px-4 py-2 rounded-lg bg-red-500 text-white font-medium hover:bg-red-600 transition-colors shadow-sm shadow-red-200"
+                 >
+                   Delete
+                 </button>
+               </div>
+            </div>
+         </div>
+      )}
       
       {/* Top Search Bar */}
       <div className="bg-white/80 backdrop-blur-md px-6 py-3 sticky top-0 z-30 border-b border-gray-100">
@@ -157,18 +333,21 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 pt-10">
+      <div className="max-w-7xl mx-auto px-6 pt-10" ref={containerRef}>
         
-        {/* Header Row: Title + Actions */}
-        <div className="flex items-end justify-between mb-4">
-          <div className="flex items-center gap-4">
+        {/* Header Row */}
+        <div className="flex items-end justify-between mb-4 pointer-events-none">
+          <div className="flex items-center gap-4 pointer-events-auto">
               <h1 className="text-3xl font-bold text-gray-900 tracking-tight leading-none font-serif">书架</h1>
               {syncStatusUI}
+              {selectedIds.size > 0 && (
+                <div className="ml-4 text-sm font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full animate-in fade-in slide-in-from-left-4">
+                  {selectedIds.size} Selected
+                </div>
+              )}
           </div>
           
-          {/* Actions Group */}
-          <div className="flex items-center gap-6">
-            
+          <div className="flex items-center gap-6 pointer-events-auto">
             {/* Import Dropdown */}
             <div className="relative" ref={importMenuRef}>
               <button
@@ -239,7 +418,6 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
             </div>
           </div>
 
-          {/* Hidden Inputs */}
           <input type="file" ref={fileInputRef} className="hidden" accept=".txt,.epub,.pdf" multiple onChange={(e) => e.target.files && onImportFiles(Array.from(e.target.files))} />
           <input type="file" ref={folderInputRef} className="hidden" 
             // @ts-ignore
@@ -249,13 +427,13 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-6 overflow-x-auto no-scrollbar mb-8">
+        <div className="flex items-center gap-6 overflow-x-auto no-scrollbar mb-8 pointer-events-none">
           {TABS.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`
-                whitespace-nowrap text-sm pb-1 transition-all relative font-medium
+                whitespace-nowrap text-sm pb-1 transition-all relative font-medium pointer-events-auto
                 ${activeTab === tab ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'}
               `}
             >
@@ -266,12 +444,10 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
 
         {/* Book Grid */}
         <div 
-          className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-6 gap-y-10"
+          className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-6 gap-y-10 selection-zone"
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
-          
-          {/* Add Book Card - Modern Minimalist */}
           {books.length === 0 && (
             <div 
               onClick={() => fileInputRef.current?.click()}
@@ -284,33 +460,49 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
                 hover:border-gray-300 hover:bg-white hover:shadow-sm
               "
             >
-               {/* Icon */}
                <div className="p-4 rounded-full bg-white shadow-sm border border-gray-100 group-hover:scale-110 transition-transform duration-300">
                  <Plus className="w-6 h-6 text-gray-400 group-hover:text-gray-600 transition-colors" />
                </div>
-
-               {/* Label */}
                <div className="mt-4 text-[11px] font-sans font-medium text-gray-400 group-hover:text-gray-600 transition-colors tracking-wide">
                  ADD BOOK
                </div>
             </div>
           )}
 
-          {/* Book Items */}
           {sortedBooks.map((book) => {
             const totalUnits = book.chapters && book.chapters.length > 0 ? book.chapters.length : Math.max(1, Math.ceil(book.content.length / 3000));
             const percentage = calculateProgress(book.currentPageIndex, totalUnits);
+            const isSelected = selectedIds.has(book.id);
 
             return (
               <div 
                 key={book.id} 
+                data-book-id={book.id}
                 className="flex flex-col gap-3 group relative cursor-pointer"
-                onClick={() => onOpenBook(book)}
+                onClick={(e) => {
+                  if (e.ctrlKey || e.metaKey || isSelecting) {
+                     e.stopPropagation();
+                     toggleSelection(book.id, true);
+                  } else if (selectedIds.size > 0 && !isSelected) {
+                     // Click on unselected item clears selection and opens it
+                     setSelectedIds(new Set());
+                     onOpenBook(book);
+                  } else if (isSelected) {
+                     e.stopPropagation();
+                     toggleSelection(book.id, true); 
+                  } else {
+                     onOpenBook(book);
+                  }
+                }}
                 onMouseEnter={() => setIsHoveringId(book.id)}
                 onMouseLeave={() => setIsHoveringId(null)}
               >
-                {/* Book Cover */}
-                <div className="relative aspect-[2/3] w-full bg-white shadow-sm border border-gray-200 overflow-hidden rounded-md transition-transform duration-300 group-hover:-translate-y-1">
+                <div 
+                  className={`
+                    relative aspect-[2/3] w-full bg-white shadow-sm border overflow-hidden rounded-md transition-all duration-300 
+                    ${isSelected ? 'ring-4 ring-blue-500/50 border-blue-500 translate-y-[-4px]' : 'border-gray-200 group-hover:-translate-y-1'}
+                  `}
+                >
                   {book.coverImage ? (
                     <img src={book.coverImage} alt={book.title} className="w-full h-full object-cover grayscale-[20%] group-hover:grayscale-0 transition-all duration-500" />
                   ) : (
@@ -321,22 +513,29 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
                     </div>
                   )}
 
-                  {/* Delete Button */}
+                  {isSelected && (
+                    <div className="absolute inset-0 bg-blue-500/10 flex items-center justify-center z-20">
+                       <div className="bg-blue-500 text-white rounded-full p-2 shadow-lg scale-110">
+                          <Check className="w-6 h-6" />
+                       </div>
+                    </div>
+                  )}
+
                   <button
-                      onClick={(e) => { e.stopPropagation(); onDeleteBook(book.id); }}
+                      onClick={(e) => requestDelete(e, book.id)}
                       className={`
                         absolute top-2 right-2 p-1.5 bg-white text-red-500 rounded-full border border-gray-200 shadow-sm
-                        hover:bg-red-50 transition-all duration-200 z-10
-                        ${isHoveringId === book.id ? 'opacity-100 scale-100' : 'opacity-0 scale-90 pointer-events-none'}
+                        hover:bg-red-50 transition-all duration-200 z-30
+                        ${isHoveringId === book.id || isSelected ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-90 pointer-events-none'}
                       `}
+                      title="Delete"
                     >
                       <Trash2 className="w-3 h-3" />
                   </button>
                 </div>
 
-                {/* Metadata */}
                 <div>
-                  <h3 className="text-[13px] font-medium text-gray-900 leading-tight line-clamp-1 mb-0.5">{book.title}</h3>
+                  <h3 className={`text-[13px] font-medium leading-tight line-clamp-1 mb-0.5 ${isSelected ? 'text-blue-600 font-bold' : 'text-gray-900'}`}>{book.title}</h3>
                   <p className="text-[11px] text-gray-400 font-mono">
                     {percentage === 0 ? 'UNREAD' : `${percentage}% DONE`}
                   </p>
@@ -346,7 +545,6 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
           })}
         </div>
 
-        {/* Empty State */}
         {sortedBooks.length === 0 && books.length > 0 && searchQuery && (
            <div className="text-center mt-20 text-gray-400 text-sm">No matching books found.</div>
         )}

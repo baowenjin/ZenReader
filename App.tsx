@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Bookshelf } from './components/Bookshelf';
 import { ReaderView } from './components/ReaderView';
@@ -166,6 +167,7 @@ const App: React.FC = () => {
           coverImage: coverImage,
           pdfArrayBuffer: pdfArrayBuffer,
           pageCount: pageCount,
+          filename: file.name, // Store original filename for sync operations
         };
         
         return newBook;
@@ -409,15 +411,33 @@ const App: React.FC = () => {
     try {
       setIsLoading(true);
       const allBooks = await getAllBooks();
-      const backupData = JSON.stringify(allBooks);
       
-      const blob = new Blob([backupData], { type: 'application/json' });
+      // Create lightweight backup (Metadata Only) to avoid large file sizes.
+      const backupData = allBooks.map(book => ({
+        id: book.id,
+        title: book.title,
+        author: book.author,
+        publisher: book.publisher,
+        currentPageIndex: book.currentPageIndex,
+        lastReadAt: book.lastReadAt,
+        createdAt: book.createdAt,
+        pageCount: book.pageCount,
+        content: undefined, 
+        chapters: undefined,
+        coverImage: undefined,
+        pdfArrayBuffer: undefined,
+        filename: book.filename
+      }));
+      
+      const json = JSON.stringify(backupData, null, 2);
+      
+      const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       
       const a = document.createElement('a');
       a.href = url;
       const date = new Date().toISOString().split('T')[0];
-      a.download = `zenreader_backup_${date}.json`;
+      a.download = `zenreader_metadata_backup_${date}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -436,25 +456,54 @@ const App: React.FC = () => {
     reader.onload = async (e) => {
       try {
         const json = e.target?.result as string;
-        const data = JSON.parse(json);
+        const backupBooks = JSON.parse(json);
         
-        if (!Array.isArray(data)) {
+        if (!Array.isArray(backupBooks)) {
           throw new Error("Invalid backup format");
         }
 
-        let restoredCount = 0;
-        for (const book of data) {
-          if (book.id && book.title && book.content) {
-            // restore timestamp if missing from older backups
-            if (!book.lastReadAt) book.lastReadAt = Date.now();
-            await saveBook(book);
-            restoredCount++;
-          }
+        const currentBooks = await getAllBooks();
+        // Create a map for fast lookup by ID
+        const bookMap = new Map(currentBooks.map(b => [b.id, b]));
+
+        let updatedCount = 0;
+        let olderCount = 0;
+        let skippedCount = 0;
+
+        for (const backupBook of backupBooks) {
+           if (!backupBook.id) continue;
+
+           const localBook = bookMap.get(backupBook.id);
+
+           if (localBook) {
+             // Smart Merge: Only update if backup has newer progress
+             const backupTime = backupBook.lastReadAt || 0;
+             const localTime = localBook.lastReadAt || 0;
+
+             if (backupTime > localTime) {
+                localBook.currentPageIndex = backupBook.currentPageIndex ?? localBook.currentPageIndex;
+                localBook.lastReadAt = backupTime;
+                // We trust the backup's progress, but keep local content
+                await saveBook(localBook);
+                updatedCount++;
+             } else {
+                olderCount++;
+             }
+           } else {
+             // If local book doesn't exist, we CANNOT restore it because the backup
+             // is metadata-only (doesn't contain content/chapters).
+             skippedCount++;
+           }
         }
 
         const updatedBooks = await getAllBooks();
         setBooks(updatedBooks);
-        alert(`Successfully restored ${restoredCount} books from backup.`);
+        
+        let msg = `Restore Complete.\n\nUpdated: ${updatedCount} books (newer progress found).`;
+        if (olderCount > 0) msg += `\nSkipped: ${olderCount} books (local progress is newer).`;
+        if (skippedCount > 0) msg += `\nSkipped: ${skippedCount} books (missing local content file).`;
+        
+        alert(msg);
       } catch (err) {
         console.error("Restore failed", err);
         alert("Failed to restore backup. Invalid file format.");
@@ -491,12 +540,42 @@ const App: React.FC = () => {
     setView('reader');
   };
 
-  const handleDeleteBook = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this book?')) {
-      await deleteBook(id);
+  const handleDeleteBooks = async (ids: string[], deleteLocal: boolean) => {
+    setIsLoading(true);
+    try {
+      // 1. Delete from Local File System (if sync connected and requested)
+      if (deleteLocal && syncHandle) {
+         let deletedCount = 0;
+         for (const id of ids) {
+            const book = books.find(b => b.id === id);
+            if (book && book.filename) {
+               try {
+                 // @ts-ignore
+                 await syncHandle.removeEntry(book.filename);
+                 deletedCount++;
+               } catch(e) { 
+                  console.warn(`Could not delete local file for ${book.title}`, e); 
+               }
+             }
+         }
+         if (deletedCount > 0) {
+             console.log(`Deleted ${deletedCount} local files.`);
+         }
+      }
+
+      // 2. Delete from DB
+      for (const id of ids) {
+        await deleteBook(id);
+      }
+      
+      // 3. Refresh State
       const updatedBooks = await getAllBooks();
       setBooks(updatedBooks);
-      // Auto-sync useEffect will handle the deletion sync
+    } catch (err) {
+      console.error("Batch delete failed", err);
+      alert("Error deleting books.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -546,7 +625,7 @@ const App: React.FC = () => {
           onExportBackup={handleExportBackup}
           onRestoreBackup={handleRestoreBackup}
           onOpenBook={handleOpenBook}
-          onDeleteBook={handleDeleteBook}
+          onDeleteBooks={handleDeleteBooks}
           onConnectSync={handleConnectSyncFolder}
           onReconnectSync={handleReconnectSync}
           isSyncConnected={isSyncConnected}
