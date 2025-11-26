@@ -355,13 +355,17 @@ const Paragraph = React.memo(({
 
   // Focus Mode Styles
   let containerClass = "relative transition-all duration-500 ease-in-out px-4 md:px-0 mb-6";
-  let textClass = "leading-relaxed transition-all duration-500";
+  
+  // Removing 'leading-relaxed' to allow inheritance from parent style
+  let textClass = "transition-all duration-500";
   
   if (isHeading) {
+     // Headings keep specific size
      textClass += " font-bold text-2xl mt-12 mb-6 opacity-90";
      containerClass += " mb-2"; // Reduce margin after heading container slightly
   } else {
-     textClass += " text-lg";
+     // Removing 'text-lg' to allow inheritance of fontSize from parent style
+     // textClass += " text-lg";
   }
 
   if (settings.focusMode) {
