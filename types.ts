@@ -1,4 +1,5 @@
 
+
 export enum ThemeType {
   LIGHT = 'light',
   SEPIA = 'sepia',
@@ -18,6 +19,9 @@ export enum FontFamily {
 
 export type AILanguage = 'auto' | 'zh' | 'en';
 
+export type PdfViewMode = 'scroll' | 'single' | 'double';
+export type PdfFitMode = 'width' | 'height' | 'manual';
+
 export interface ReaderSettings {
   theme: ThemeType;
   fontSize: number;
@@ -31,11 +35,17 @@ export interface ReaderSettings {
   focusParagraphCount: number; // Number of paragraphs to highlight
   aiMode: boolean; // New AI Companion Mode
   aiLanguage: AILanguage; // Language for AI definitions
+  
+  // PDF Specific
+  pdfViewMode: PdfViewMode;
+  pdfScale: number; // 1.0 = 100%
+  pdfFitMode: PdfFitMode;
 }
 
 export interface Chapter {
   title: string;
   content: string;
+  pageNumber?: number; // For PDF, 1-based page number indicating start of chapter
 }
 
 export interface BookData {
@@ -45,10 +55,12 @@ export interface BookData {
   publisher?: string; // Extracted publisher name
   content: string; // The full text content
   chapters: Chapter[]; // Structured chapters (title + content)
-  currentPageIndex: number; // In this context, "page" refers to "chapter index"
+  currentPageIndex: number; // For TXT/EPUB: Chapter Index. For PDF: Page Index (0-based)
   createdAt: number;
   lastReadAt: number;
   coverImage?: string; // Base64 string for the cover
+  pdfArrayBuffer?: ArrayBuffer; // Stored PDF binary for native rendering
+  pageCount?: number; // Total pages for PDF
 }
 
 export interface AIEntityData {

@@ -1,4 +1,5 @@
 
+
 import { ThemeType, FontFamily } from './types';
 
 // Centralized Color Definitions for JS + Tailwind usage
@@ -30,6 +31,11 @@ export const DEFAULT_SETTINGS = {
   focusParagraphCount: 1, 
   aiMode: true,
   aiLanguage: 'auto' as const,
+  
+  // PDF Defaults
+  pdfViewMode: 'single' as const,
+  pdfFitMode: 'width' as const,
+  pdfScale: 1.0,
 };
 
 export const CHARS_PER_PAGE_ESTIMATE = 2000;

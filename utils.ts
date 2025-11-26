@@ -1,4 +1,5 @@
 
+
 import { Chapter } from './types';
 
 /**
@@ -44,7 +45,7 @@ export const calculateProgress = (currentPage: number, totalPages: number): numb
 export const parseChapters = (text: string): Chapter[] => {
   // Regex to match common Chinese chapter headers at start of line
   // Matches: 第1章, 第一章, 第100节, Chapter 1, etc.
-  const chapterRegex = /(?:^|\n)\s*(第[0-9零一二三四五六七八九十百千]+[章回节卷]|Chapter\s+\d+).*/g;
+  const chapterRegex = /(?:^|\n)\s*(#{1,3}\s+)?(第[0-9零一二三四五六七八九十百千]+[章回节卷]|Chapter\s+\d+|[A-Z][a-z]+(\s+[A-Z][a-z]+)*).*/g;
   
   const matches = [...text.matchAll(chapterRegex)];
   
@@ -76,7 +77,8 @@ export const parseChapters = (text: string): Chapter[] => {
     const endIndex = i < matches.length - 1 ? matches[i + 1].index! : text.length;
     
     const fullSection = text.substring(startIndex, endIndex);
-    const title = match[0].trim(); // The captured line is the title
+    // Clean up title: remove Markdown hashes if present
+    const title = match[0].replace(/^[#\s]+/, '').trim().split('\n')[0]; 
     
     // We keep full section so the reader sees the title in the text body too
     chapters.push({
@@ -103,7 +105,7 @@ const loadScript = (src: string): Promise<void> => {
   });
 };
 
-const ensureEpubLibrariesLoaded = async () => {
+export const ensureEpubLibrariesLoaded = async () => {
   // Check for JSZip
   if (!(window as any).JSZip) {
     console.log('Loading JSZip...');
@@ -118,7 +120,7 @@ const ensureEpubLibrariesLoaded = async () => {
   }
 };
 
-const ensurePdfLibraryLoaded = async () => {
+export const ensurePdfLibraryLoaded = async () => {
   if (!(window as any).pdfjsLib) {
     console.log('Loading PDF.js...');
     await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
@@ -260,9 +262,10 @@ export const parseEpub = async (file: File): Promise<{ chapters: Chapter[], cove
 };
 
 /**
- * Parses a PDF file, extracts text content, metadata, and cover image.
+ * Native PDF Parsing.
+ * Returns the raw ArrayBuffer, page count, and extracts TOC.
  */
-export const parsePdf = async (file: File): Promise<{ content: string, coverImage?: string, author?: string, title?: string }> => {
+export const parsePdf = async (file: File): Promise<{ content: string, pdfArrayBuffer: ArrayBuffer, coverImage?: string, author?: string, title?: string, pageCount: number, chapters: Chapter[] }> => {
   await ensurePdfLibraryLoaded();
 
   return new Promise((resolve, reject) => {
@@ -276,20 +279,26 @@ export const parsePdf = async (file: File): Promise<{ content: string, coverImag
         }
 
         const pdfjsLib = (window as any).pdfjsLib;
-        const loadingTask = pdfjsLib.getDocument(new Uint8Array(arrayBuffer));
+        
+        // CRITICAL: Clone buffer for PDF.js.
+        const bufferForPdf = arrayBuffer.slice(0);
+        
+        const loadingTask = pdfjsLib.getDocument(new Uint8Array(bufferForPdf));
         const pdf = await loadingTask.promise;
+        const pageCount = pdf.numPages;
 
         let fullText = '';
         let author = '';
-        let title = '';
+        let docTitle = '';
         let coverImage = undefined;
+        let chapters: Chapter[] = [];
 
         // 1. Get Metadata
         try {
           const metadata = await pdf.getMetadata();
           if (metadata && metadata.info) {
             author = metadata.info.Author || '';
-            title = metadata.info.Title || '';
+            docTitle = metadata.info.Title || '';
           }
         } catch (metaErr) {
           console.warn("PDF metadata extraction failed", metaErr);
@@ -298,9 +307,7 @@ export const parsePdf = async (file: File): Promise<{ content: string, coverImag
         // 2. Generate Cover (Page 1)
         try {
           const page1 = await pdf.getPage(1);
-          const scale = 1.5;
-          const viewport = page1.getViewport({ scale });
-          
+          const viewport = page1.getViewport({ scale: 1.0 });
           const canvas = document.createElement('canvas');
           const context = canvas.getContext('2d');
           canvas.height = viewport.height;
@@ -314,18 +321,86 @@ export const parsePdf = async (file: File): Promise<{ content: string, coverImag
           console.warn("PDF cover generation failed", coverErr);
         }
 
-        // 3. Extract Text
-        const maxPages = pdf.numPages;
-        for (let i = 1; i <= maxPages; i++) {
-          const page = await pdf.getPage(i);
-          const textContent = await page.getTextContent();
-          // Join text items with space, and standard lines with newline
-          // This is a rough approximation as PDF doesn't have flow text
-          const pageText = textContent.items.map((item: any) => item.str).join(' ');
-          fullText += pageText + '\n\n';
+        // 3. Extract Outline (TOC)
+        try {
+          const outline = await pdf.getOutline();
+          if (outline && outline.length > 0) {
+             const processOutlineItem = async (item: any): Promise<Chapter | null> => {
+                 let pageIndex = 0;
+                 try {
+                     // Resolve destination to page index
+                     let dest = item.dest;
+                     if (typeof dest === 'string') {
+                         dest = await pdf.getDestination(dest);
+                     }
+                     if (Array.isArray(dest)) {
+                         const ref = dest[0];
+                         // getPageIndex returns 0-based index
+                         pageIndex = await pdf.getPageIndex(ref);
+                     }
+                 } catch (e) { console.warn("Could not resolve outline destination", e); }
+                 
+                 return {
+                     title: item.title,
+                     content: '', // Empty for PDF
+                     pageNumber: pageIndex + 1 // Convert to 1-based for UI consistency
+                 };
+             };
+
+             // We only process top-level items for now to keep it simple, 
+             // or flat map the tree. Let's flatten one level.
+             for (const item of outline) {
+                 const chapter = await processOutlineItem(item);
+                 if (chapter) {
+                    chapters.push(chapter);
+                    if (item.items && item.items.length > 0) {
+                        for (const subItem of item.items) {
+                             const subChapter = await processOutlineItem(subItem);
+                             if (subChapter) {
+                                 subChapter.title = "  " + subChapter.title; // Indent
+                                 chapters.push(subChapter);
+                             }
+                        }
+                    }
+                 }
+             }
+          }
+        } catch (tocErr) {
+            console.warn("PDF Outline extraction failed", tocErr);
         }
 
-        resolve({ content: fullText, coverImage, author, title });
+        // If no chapters/outline found, we default to no chapters (user navigates by page)
+        // or we could create dummy chapters for every 10 pages? 
+        // Better to just have an empty chapter list and let Reader handle page-only nav.
+        if (chapters.length === 0) {
+             chapters = [{ title: "Full Document", content: "", pageNumber: 1 }];
+        }
+
+        // 4. Simple Text Extraction (for search/indexing only)
+        const maxPagesToExtract = Math.min(pdf.numPages, 10);
+        
+        for (let i = 1; i <= maxPagesToExtract; i++) {
+           try {
+             const page = await pdf.getPage(i);
+             const textContent = await page.getTextContent();
+             const pageText = textContent.items.map((item: any) => item.str).join(' ');
+             fullText += pageText + "\n\n";
+           } catch (e) {}
+        }
+        
+        if (pdf.numPages > 10) {
+            fullText += "\n...[Remaining PDF text not indexed for performance]...";
+        }
+
+        resolve({ 
+            content: fullText, 
+            pdfArrayBuffer: arrayBuffer, 
+            coverImage, 
+            author, 
+            title: docTitle,
+            pageCount,
+            chapters
+        });
 
       } catch (err) {
         console.error("PDF Parse Error", err);
@@ -391,9 +466,21 @@ export const extractMetadata = (text: string): { author?: string, title?: string
 };
 
 /**
- * Generates a simple random ID safe for non-secure contexts (file://)
+ * Generates an ID.
+ * If seed is provided (e.g. filename + filesize), generates a deterministic hash.
+ * This allows multiple devices to recognize the same file as the same book ID.
  */
-export const generateId = (): string => {
+export const generateId = (seed?: string): string => {
+  if (seed) {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+      const char = seed.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    // Return a base36 string of the absolute hash, padded to be reasonably safe
+    return Math.abs(hash).toString(36).padEnd(8, 'x') + seed.length.toString(36);
+  }
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 };
 

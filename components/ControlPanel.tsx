@@ -1,9 +1,11 @@
 
+
 import React from 'react';
 import { 
-  X, Sun, Moon, Coffee, Minus, Plus, AlignLeft, AlignJustify, Target, Sparkles, Layers, EyeOff, Clock, Languages
+  X, Sun, Moon, Coffee, Minus, Plus, AlignLeft, AlignJustify, Target, Sparkles, Layers, EyeOff, Clock, Languages,
+  Scroll, File, BookOpen, ZoomIn, ZoomOut, RotateCcw
 } from 'lucide-react';
-import { ReaderSettings, ThemeType, FontFamily, AILanguage } from '../types';
+import { ReaderSettings, ThemeType, FontFamily, AILanguage, PdfViewMode } from '../types';
 import { THEMES, FONT_LABELS, FONT_FAMILIES } from '../constants';
 
 interface ControlPanelProps {
@@ -12,6 +14,7 @@ interface ControlPanelProps {
   settings: ReaderSettings;
   onUpdateSettings: (newSettings: Partial<ReaderSettings>) => void;
   currentTheme: ThemeType;
+  isPdf?: boolean;
 }
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -20,6 +23,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   settings,
   onUpdateSettings,
   currentTheme,
+  isPdf = false,
 }) => {
   const themeStyles = THEMES[currentTheme];
 
@@ -82,100 +86,170 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             </div>
           </section>
 
-          {/* Typography */}
-          <section className="space-y-4">
-            <h3 className="text-xs uppercase tracking-wider opacity-60 font-bold">Typography</h3>
-            
-            {/* Font Family List */}
-            <div className="grid grid-cols-1 gap-2">
-              {Object.entries(FONT_LABELS).map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => onUpdateSettings({ fontFamily: key as FontFamily })}
-                  className={`
-                    flex items-center justify-between px-4 py-3 rounded-lg text-left transition-colors
-                    ${settings.fontFamily === key ? themeStyles.active : themeStyles.hover}
-                  `}
-                >
-                  <span 
-                    style={{ fontFamily: FONT_FAMILIES[key as FontFamily] }}
-                    className="text-base"
-                  >
-                    {label}
-                  </span>
-                  {settings.fontFamily === key && <div className="w-2 h-2 rounded-full bg-blue-500" />}
-                </button>
-              ))}
-            </div>
+          {/* PDF Specific Settings */}
+          {isPdf && (
+            <section className="space-y-4">
+              <h3 className="text-xs uppercase tracking-wider opacity-60 font-bold">PDF View Options</h3>
+              
+              {/* View Mode */}
+              <div className={`flex p-1 rounded-lg ${themeStyles.active}`}>
+                 {[
+                   { value: 'scroll', icon: Scroll, label: 'Scroll' },
+                   { value: 'single', icon: File, label: 'Single' },
+                   { value: 'double', icon: BookOpen, label: 'Book' }, // Hide on mobile via CSS if needed
+                 ].map((mode) => (
+                   <button
+                     key={mode.value}
+                     onClick={() => onUpdateSettings({ pdfViewMode: mode.value as PdfViewMode })}
+                     className={`
+                       flex-1 flex flex-col items-center gap-1 py-2 rounded-md transition-all
+                       ${settings.pdfViewMode === mode.value ? 'bg-white shadow-sm text-gray-900' : 'opacity-50 hover:opacity-100'}
+                       ${mode.value === 'double' ? 'hidden md:flex' : 'flex'} 
+                     `}
+                     title={mode.label}
+                   >
+                     <mode.icon className="w-5 h-5" />
+                   </button>
+                 ))}
+              </div>
 
-            {/* Font Size */}
-            <div className="pt-4 space-y-3">
-               <div className="flex justify-between text-sm opacity-80 font-medium">
-                 <span>Font Size</span>
-                 <span>{settings.fontSize}px</span>
-               </div>
-               <div className={`flex items-center gap-4 p-2 rounded-lg ${themeStyles.border} border`}>
-                 <button 
-                    onClick={() => onUpdateSettings({ fontSize: Math.max(12, settings.fontSize - 1) })}
-                    className={`p-2 rounded-md ${themeStyles.hover}`}
-                 >
-                   <Minus className="w-4 h-4" />
-                 </button>
+              {/* Zoom Controls */}
+              <div className="space-y-3">
+                 <div className="flex justify-between text-sm opacity-80 font-medium">
+                   <span>Zoom Level</span>
+                   <span>{Math.round((settings.pdfScale || 1.2) * 100)}%</span>
+                 </div>
+                 <div className={`flex items-center gap-2 p-2 rounded-lg ${themeStyles.border} border`}>
+                   <button 
+                      onClick={() => onUpdateSettings({ pdfScale: Math.max(0.5, (settings.pdfScale || 1.2) - 0.1) })}
+                      className={`p-2 rounded-md ${themeStyles.hover}`}
+                      title="Zoom Out"
+                   >
+                     <ZoomOut className="w-4 h-4" />
+                   </button>
+                   
+                   <div className="flex-1 text-center text-sm font-mono opacity-70">
+                      {((settings.pdfScale || 1.2)).toFixed(1)}x
+                   </div>
+
+                   <button 
+                      onClick={() => onUpdateSettings({ pdfScale: 1.2 })} // Reset
+                      className={`p-2 rounded-md ${themeStyles.hover}`}
+                      title="Reset Zoom"
+                   >
+                     <RotateCcw className="w-3.5 h-3.5" />
+                   </button>
+
+                   <button 
+                      onClick={() => onUpdateSettings({ pdfScale: Math.min(3.0, (settings.pdfScale || 1.2) + 0.1) })}
+                      className={`p-2 rounded-md ${themeStyles.hover}`}
+                      title="Zoom In"
+                   >
+                     <ZoomIn className="w-4 h-4" />
+                   </button>
+                 </div>
+              </div>
+            </section>
+          )}
+
+          {/* Typography (Hidden for PDF) */}
+          {!isPdf && (
+            <section className="space-y-4">
+              <h3 className="text-xs uppercase tracking-wider opacity-60 font-bold">Typography</h3>
+              
+              {/* Font Family List */}
+              <div className="grid grid-cols-1 gap-2">
+                {Object.entries(FONT_LABELS).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => onUpdateSettings({ fontFamily: key as FontFamily })}
+                    className={`
+                      flex items-center justify-between px-4 py-3 rounded-lg text-left transition-colors
+                      ${settings.fontFamily === key ? themeStyles.active : themeStyles.hover}
+                    `}
+                  >
+                    <span 
+                      style={{ fontFamily: FONT_FAMILIES[key as FontFamily] }}
+                      className="text-base"
+                    >
+                      {label}
+                    </span>
+                    {settings.fontFamily === key && <div className="w-2 h-2 rounded-full bg-blue-500" />}
+                  </button>
+                ))}
+              </div>
+
+              {/* Font Size */}
+              <div className="pt-4 space-y-3">
+                 <div className="flex justify-between text-sm opacity-80 font-medium">
+                   <span>Font Size</span>
+                   <span>{settings.fontSize}px</span>
+                 </div>
+                 <div className={`flex items-center gap-4 p-2 rounded-lg ${themeStyles.border} border`}>
+                   <button 
+                      onClick={() => onUpdateSettings({ fontSize: Math.max(12, settings.fontSize - 1) })}
+                      className={`p-2 rounded-md ${themeStyles.hover}`}
+                   >
+                     <Minus className="w-4 h-4" />
+                   </button>
+                   <input 
+                      type="range" 
+                      min="12" 
+                      max="48" 
+                      value={settings.fontSize} 
+                      onChange={(e) => onUpdateSettings({ fontSize: parseInt(e.target.value) })}
+                      className="flex-1 accent-blue-500 h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
+                   />
+                   <button 
+                      onClick={() => onUpdateSettings({ fontSize: Math.min(48, settings.fontSize + 1) })}
+                      className={`p-2 rounded-md ${themeStyles.hover}`}
+                   >
+                     <Plus className="w-4 h-4" />
+                   </button>
+                 </div>
+              </div>
+
+              {/* Line Height */}
+               <div className="pt-2 space-y-3">
+                 <div className="flex justify-between text-sm opacity-80 font-medium">
+                   <span>Line Height</span>
+                   <span>{settings.lineHeight}</span>
+                 </div>
                  <input 
                     type="range" 
-                    min="12" 
-                    max="48" 
-                    value={settings.fontSize} 
-                    onChange={(e) => onUpdateSettings({ fontSize: parseInt(e.target.value) })}
-                    className="flex-1 accent-blue-500 h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
+                    min="1.2" 
+                    max="2.4" 
+                    step="0.1"
+                    value={settings.lineHeight} 
+                    onChange={(e) => onUpdateSettings({ lineHeight: parseFloat(e.target.value) })}
+                    className="w-full accent-blue-500 h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
                  />
-                 <button 
-                    onClick={() => onUpdateSettings({ fontSize: Math.min(48, settings.fontSize + 1) })}
-                    className={`p-2 rounded-md ${themeStyles.hover}`}
-                 >
-                   <Plus className="w-4 h-4" />
-                 </button>
-               </div>
-            </div>
-
-            {/* Line Height */}
-             <div className="pt-2 space-y-3">
-               <div className="flex justify-between text-sm opacity-80 font-medium">
-                 <span>Line Height</span>
-                 <span>{settings.lineHeight}</span>
-               </div>
-               <input 
-                  type="range" 
-                  min="1.2" 
-                  max="2.4" 
-                  step="0.1"
-                  value={settings.lineHeight} 
-                  onChange={(e) => onUpdateSettings({ lineHeight: parseFloat(e.target.value) })}
-                  className="w-full accent-blue-500 h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
-               />
-            </div>
-          </section>
+              </div>
+            </section>
+          )}
 
           {/* Layout & Behavior */}
           <section className="space-y-3">
              <h3 className="text-xs uppercase tracking-wider opacity-60 font-bold">Layout & Behavior</h3>
              
-             <div className={`flex p-1 rounded-lg ${themeStyles.active}`}>
-               <button
-                 onClick={() => onUpdateSettings({ textAlign: 'left' })}
-                 className={`flex-1 flex justify-center py-2 rounded-md transition-all ${settings.textAlign === 'left' ? 'bg-white shadow-sm text-gray-900' : 'opacity-50'}`}
-                 title="Align Left"
-               >
-                 <AlignLeft className="w-5 h-5" />
-               </button>
-               <button
-                 onClick={() => onUpdateSettings({ textAlign: 'justify' })}
-                 className={`flex-1 flex justify-center py-2 rounded-md transition-all ${settings.textAlign === 'justify' ? 'bg-white shadow-sm text-gray-900' : 'opacity-50'}`}
-                 title="Justify"
-               >
-                 <AlignJustify className="w-5 h-5" />
-               </button>
-             </div>
+             {!isPdf && (
+               <div className={`flex p-1 rounded-lg ${themeStyles.active}`}>
+                 <button
+                   onClick={() => onUpdateSettings({ textAlign: 'left' })}
+                   className={`flex-1 flex justify-center py-2 rounded-md transition-all ${settings.textAlign === 'left' ? 'bg-white shadow-sm text-gray-900' : 'opacity-50'}`}
+                   title="Align Left"
+                 >
+                   <AlignLeft className="w-5 h-5" />
+                 </button>
+                 <button
+                   onClick={() => onUpdateSettings({ textAlign: 'justify' })}
+                   className={`flex-1 flex justify-center py-2 rounded-md transition-all ${settings.textAlign === 'justify' ? 'bg-white shadow-sm text-gray-900' : 'opacity-50'}`}
+                   title="Justify"
+                 >
+                   <AlignJustify className="w-5 h-5" />
+                 </button>
+               </div>
+             )}
 
              <div className="pt-2 space-y-3">
                <div className="flex justify-between text-sm opacity-80 font-medium">
@@ -236,106 +310,108 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             </div>
 
             {/* Focus Mode & AI Mode */}
-            <div className="pt-4 border-t border-gray-200/20 space-y-4">
-              
-              {/* Focus Mode */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                     <Target className="w-4 h-4" />
-                     <span>Focus Mode</span>
-                  </div>
-                  <button
-                    onClick={() => onUpdateSettings({ focusMode: !settings.focusMode })}
-                    className={`
-                      relative inline-flex h-6 w-11 items-center rounded-full transition-colors
-                      ${settings.focusMode ? 'bg-blue-500' : 'bg-gray-300'}
-                    `}
-                  >
-                    <span
+            {!isPdf && (
+              <div className="pt-4 border-t border-gray-200/20 space-y-4">
+                
+                {/* Focus Mode */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                       <Target className="w-4 h-4" />
+                       <span>Focus Mode</span>
+                    </div>
+                    <button
+                      onClick={() => onUpdateSettings({ focusMode: !settings.focusMode })}
                       className={`
-                        inline-block h-4 w-4 transform rounded-full bg-white transition-transform
-                        ${settings.focusMode ? 'translate-x-6' : 'translate-x-1'}
+                        relative inline-flex h-6 w-11 items-center rounded-full transition-colors
+                        ${settings.focusMode ? 'bg-blue-500' : 'bg-gray-300'}
                       `}
-                    />
-                  </button>
+                    >
+                      <span
+                        className={`
+                          inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                          ${settings.focusMode ? 'translate-x-6' : 'translate-x-1'}
+                        `}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Focus Paragraph Count */}
+                  {settings.focusMode && (
+                    <div className="pl-6 pr-1 space-y-2 animate-in slide-in-from-top-2 duration-200">
+                      <div className="flex justify-between text-xs opacity-70">
+                         <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> Focus Lines</span>
+                         <span>{settings.focusParagraphCount || 3}</span>
+                      </div>
+                      <input 
+                        type="range" 
+                        min="1" 
+                        max="9" 
+                        step="2" // Odd numbers work best for centering
+                        value={settings.focusParagraphCount || 3} 
+                        onChange={(e) => onUpdateSettings({ focusParagraphCount: parseInt(e.target.value) })}
+                        className="w-full accent-blue-500 h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+                  )}
                 </div>
 
-                {/* Focus Paragraph Count */}
-                {settings.focusMode && (
-                  <div className="pl-6 pr-1 space-y-2 animate-in slide-in-from-top-2 duration-200">
-                    <div className="flex justify-between text-xs opacity-70">
-                       <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> Focus Lines</span>
-                       <span>{settings.focusParagraphCount || 3}</span>
+                {/* AI Mode */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                       <Sparkles className="w-4 h-4 text-amber-500" />
+                       <span>AI Context Menu</span>
                     </div>
-                    <input 
-                      type="range" 
-                      min="1" 
-                      max="9" 
-                      step="2" // Odd numbers work best for centering
-                      value={settings.focusParagraphCount || 3} 
-                      onChange={(e) => onUpdateSettings({ focusParagraphCount: parseInt(e.target.value) })}
-                      className="w-full accent-blue-500 h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* AI Mode */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                     <Sparkles className="w-4 h-4 text-amber-500" />
-                     <span>AI Context Menu</span>
-                  </div>
-                  <button
-                    onClick={() => onUpdateSettings({ aiMode: !settings.aiMode })}
-                    className={`
-                      relative inline-flex h-6 w-11 items-center rounded-full transition-colors
-                      ${settings.aiMode ? 'bg-amber-500' : 'bg-gray-300'}
-                    `}
-                  >
-                    <span
+                    <button
+                      onClick={() => onUpdateSettings({ aiMode: !settings.aiMode })}
                       className={`
-                        inline-block h-4 w-4 transform rounded-full bg-white transition-transform
-                        ${settings.aiMode ? 'translate-x-6' : 'translate-x-1'}
+                        relative inline-flex h-6 w-11 items-center rounded-full transition-colors
+                        ${settings.aiMode ? 'bg-amber-500' : 'bg-gray-300'}
                       `}
-                    />
-                  </button>
+                    >
+                      <span
+                        className={`
+                          inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                          ${settings.aiMode ? 'translate-x-6' : 'translate-x-1'}
+                        `}
+                      />
+                    </button>
+                  </div>
+
+                  {settings.aiMode && (
+                    <div className="pl-6 pr-1 space-y-2 animate-in slide-in-from-top-2 duration-200">
+                      <div className="flex justify-between text-xs opacity-70">
+                         <span className="flex items-center gap-1"><Languages className="w-3 h-3" /> Output Language</span>
+                      </div>
+                      <div className={`flex p-1 rounded-lg ${themeStyles.active}`}>
+                         {[
+                           { value: 'auto', label: 'Auto' },
+                           { value: 'zh', label: '中文' },
+                           { value: 'en', label: 'Eng' },
+                         ].map((lang) => (
+                           <button
+                             key={lang.value}
+                             onClick={() => onUpdateSettings({ aiLanguage: lang.value as AILanguage })}
+                             className={`
+                               flex-1 py-1.5 text-xs font-medium rounded-md transition-all
+                               ${settings.aiLanguage === lang.value ? 'bg-white shadow-sm text-gray-900' : 'opacity-50'}
+                             `}
+                           >
+                             {lang.label}
+                           </button>
+                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-xs opacity-60">
+                     Select text and right-click to trigger AI explanations and translations.
+                  </p>
                 </div>
 
-                {settings.aiMode && (
-                  <div className="pl-6 pr-1 space-y-2 animate-in slide-in-from-top-2 duration-200">
-                    <div className="flex justify-between text-xs opacity-70">
-                       <span className="flex items-center gap-1"><Languages className="w-3 h-3" /> Output Language</span>
-                    </div>
-                    <div className={`flex p-1 rounded-lg ${themeStyles.active}`}>
-                       {[
-                         { value: 'auto', label: 'Auto' },
-                         { value: 'zh', label: '中文' },
-                         { value: 'en', label: 'Eng' },
-                       ].map((lang) => (
-                         <button
-                           key={lang.value}
-                           onClick={() => onUpdateSettings({ aiLanguage: lang.value as AILanguage })}
-                           className={`
-                             flex-1 py-1.5 text-xs font-medium rounded-md transition-all
-                             ${settings.aiLanguage === lang.value ? 'bg-white shadow-sm text-gray-900' : 'opacity-50'}
-                           `}
-                         >
-                           {lang.label}
-                         </button>
-                       ))}
-                    </div>
-                  </div>
-                )}
-
-                <p className="text-xs opacity-60">
-                   Select text and right-click to trigger AI explanations and translations.
-                </p>
               </div>
-
-            </div>
+            )}
           </section>
 
         </div>

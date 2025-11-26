@@ -1,6 +1,7 @@
 
+
 import React, { useRef, useState, useEffect } from 'react';
-import { Plus, Search, Trash2, FolderInput, Download, ChevronDown, FileText, FileUp, FileDown } from 'lucide-react';
+import { Plus, Search, Trash2, FolderInput, Download, ChevronDown, FileText, FileUp, FileDown, Cloud, CloudLightning, RefreshCw } from 'lucide-react';
 import { BookData } from '../types';
 import { calculateProgress } from '../utils';
 
@@ -13,6 +14,10 @@ interface BookshelfProps {
   onExportBackup: () => void;
   onRestoreBackup: (file: File) => void;
   onDeleteBook: (id: string) => void;
+  onConnectSync: () => void;
+  onReconnectSync: () => void;
+  isSyncConnected: boolean;
+  hasSyncHandle: boolean;
 }
 
 const TABS = ['默认', '更新', '进度', '书名', '字数'];
@@ -24,7 +29,11 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
   onImportFolder,
   onExportBackup,
   onRestoreBackup,
-  onDeleteBook 
+  onDeleteBook,
+  onConnectSync,
+  onReconnectSync,
+  isSyncConnected,
+  hasSyncHandle
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -83,21 +92,51 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
     }
   };
 
-  const handleFolderScanClick = () => {
-    // @ts-ignore
-    if (window.showDirectoryPicker) {
-      onImportFolder();
-    } else {
-      folderInputRef.current?.click();
-    }
-  };
-
   const handleFolderInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       onImportFiles(Array.from(e.target.files));
     }
     if (e.target) e.target.value = '';
   };
+
+  // Sync Status UI Logic
+  let syncStatusUI;
+  if (isSyncConnected) {
+      syncStatusUI = (
+          <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+             <span>Synced</span>
+          </div>
+      );
+  } else if (hasSyncHandle) {
+      // We have a handle but not connected (need permission)
+      syncStatusUI = (
+          <button 
+             onClick={onReconnectSync}
+             className="flex items-center gap-1.5 text-xs font-medium text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-100 hover:bg-amber-100 transition-colors"
+          >
+             <RefreshCw className="w-3 h-3" />
+             <span>Reconnect</span>
+          </button>
+      );
+  } else {
+      // No sync set up
+      // @ts-ignore
+      const showSyncButton = !!window.showDirectoryPicker;
+      if (showSyncButton) {
+          syncStatusUI = (
+            <button
+                onClick={onConnectSync}
+                className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors group"
+            >
+                <div className="p-1.5 rounded-md bg-gray-100 group-hover:bg-blue-50 transition-colors">
+                    <Cloud className="w-4 h-4" />
+                </div>
+                <span>Connect Sync Folder</span>
+            </button>
+          );
+      }
+  }
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] text-gray-900 pb-20 font-sans">
@@ -122,7 +161,10 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
         
         {/* Header Row: Title + Actions */}
         <div className="flex items-end justify-between mb-4">
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight leading-none font-serif">书架</h1>
+          <div className="flex items-center gap-4">
+              <h1 className="text-3xl font-bold text-gray-900 tracking-tight leading-none font-serif">书架</h1>
+              {syncStatusUI}
+          </div>
           
           {/* Actions Group */}
           <div className="flex items-center gap-6">
@@ -149,6 +191,13 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
                     >
                       <FileText className="w-4 h-4" />
                       <span>添加文件</span>
+                    </button>
+                    <button
+                      onClick={() => { setActiveMenu(null); folderInputRef.current?.click(); }}
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 flex items-center gap-3 transition-colors"
+                    >
+                      <FolderInput className="w-4 h-4" />
+                      <span>扫描文件夹</span>
                     </button>
                     <div className="h-px bg-gray-50"></div>
                     <button
@@ -188,15 +237,6 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
                 </div>
               )}
             </div>
-
-            {/* Scan Folder */}
-            <button
-              onClick={handleFolderScanClick}
-              className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
-            >
-              <FolderInput className="w-4 h-4" />
-              <span>扫描</span>
-            </button>
           </div>
 
           {/* Hidden Inputs */}

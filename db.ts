@@ -1,9 +1,11 @@
 
+
 import { BookData } from './types';
 
 const DB_NAME = 'ZenReaderDB';
-const DB_VERSION = 2; // Bumped version to force onupgradeneeded
+const DB_VERSION = 3; // Bumped for handles store
 const STORE_NAME = 'books';
+const HANDLE_STORE_NAME = 'handles';
 
 export const initDB = (): Promise<void> => {
   return new Promise((resolve, reject) => {
@@ -18,6 +20,10 @@ export const initDB = (): Promise<void> => {
       const db = (event.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+      // Store for FileSystemHandles
+      if (!db.objectStoreNames.contains(HANDLE_STORE_NAME)) {
+        db.createObjectStore(HANDLE_STORE_NAME);
       }
     };
 
@@ -111,5 +117,35 @@ export const deleteBook = (id: string): Promise<void> => {
       }
     };
     request.onerror = () => reject('Error opening DB for delete');
+  });
+};
+
+// --- Directory Handle Persistence ---
+
+export const saveDirectoryHandle = (handle: any): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onsuccess = () => {
+       const db = request.result;
+       const tx = db.transaction(HANDLE_STORE_NAME, 'readwrite');
+       // We use a fixed key 'syncDir' since we only support one sync folder
+       tx.objectStore(HANDLE_STORE_NAME).put(handle, 'syncDir');
+       tx.oncomplete = () => resolve();
+       tx.onerror = () => reject('Failed to save handle');
+    };
+  });
+};
+
+export const getDirectoryHandle = (): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onsuccess = () => {
+       const db = request.result;
+       const tx = db.transaction(HANDLE_STORE_NAME, 'readonly');
+       const getReq = tx.objectStore(HANDLE_STORE_NAME).get('syncDir');
+       getReq.onsuccess = () => resolve(getReq.result);
+       getReq.onerror = () => resolve(null);
+    };
+    request.onerror = () => resolve(null);
   });
 };

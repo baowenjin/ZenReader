@@ -1,12 +1,13 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Bookshelf } from './components/Bookshelf';
 import { ReaderView } from './components/ReaderView';
 import { ControlPanel } from './components/ControlPanel';
 import { BookData, ReaderSettings, Chapter } from './types';
 import { DEFAULT_SETTINGS, THEME_COLORS } from './constants';
 import { parseChapters, parseEpub, parsePdf, generateId, extractMetadata, scanDirectoryForFiles } from './utils';
-import { initDB, saveBook, getAllBooks, updateBookProgress, deleteBook } from './db';
+import { initDB, saveBook, getAllBooks, updateBookProgress, deleteBook, saveDirectoryHandle, getDirectoryHandle } from './db';
+import { verifyPermission, readSyncFile, writeSyncFile, SyncState } from './fsHelpers';
 
 const App: React.FC = () => {
   // Application State
@@ -14,6 +15,11 @@ const App: React.FC = () => {
   const [books, setBooks] = useState<BookData[]>([]);
   const [activeBook, setActiveBook] = useState<BookData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Sync State
+  const [syncHandle, setSyncHandle] = useState<any | null>(null);
+  const [isSyncConnected, setIsSyncConnected] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
 
   const [settings, setSettings] = useState<ReaderSettings>(() => {
     const saved = localStorage.getItem('zenreader-settings');
@@ -30,6 +36,16 @@ const App: React.FC = () => {
         await initDB();
         const loadedBooks = await getAllBooks();
         setBooks(loadedBooks);
+
+        // Check for persisted sync handle
+        const handle = await getDirectoryHandle();
+        if (handle) {
+          setSyncHandle(handle);
+          // We can't immediately verify permission without interaction on page load in some browsers,
+          // but we check if we "can" read.
+          // In standard File System Access API, we might need to ask user to "Reconnect".
+          // We will let the Bookshelf UI show a "Reconnect" state if handle exists but no permission.
+        }
       } catch (e) {
         console.error("Failed to load database", e);
       } finally {
@@ -39,18 +55,42 @@ const App: React.FC = () => {
     init();
   }, []);
 
-  // Sync Settings & Body Theme
+  // Sync Settings to LocalStorage (Immediate)
   useEffect(() => {
     localStorage.setItem('zenreader-settings', JSON.stringify(settings));
     
     // Only apply theme to body if in reader mode, otherwise use default gray for shelf
     if (view === 'reader') {
-      // Use centralized theme colors to ensure consistency
       document.body.style.backgroundColor = THEME_COLORS[settings.theme].bg;
     } else {
        document.body.style.backgroundColor = THEME_COLORS.light.uiBg; // Default shelf bg
     }
   }, [settings, view]);
+
+  // --- AUTOMATIC SYNC LOGIC (Debounced) ---
+  useEffect(() => {
+    // Only run if we are connected and have a handle
+    if (!isSyncConnected || !syncHandle) return;
+
+    const performSync = async () => {
+      setSyncStatus('syncing');
+      try {
+         await syncStateToDisk(syncHandle, books, settings);
+         setSyncStatus('success');
+         // Clear success message after 3s
+         setTimeout(() => setSyncStatus((prev) => prev === 'success' ? 'idle' : prev), 3000);
+      } catch (error) {
+         console.error("Auto-sync failed:", error);
+         setSyncStatus('error');
+      }
+    };
+
+    // Debounce 2 seconds
+    const timer = setTimeout(performSync, 2000);
+    return () => clearTimeout(timer);
+
+  }, [books, settings, isSyncConnected, syncHandle]);
+
 
   const processFile = async (file: File): Promise<BookData | null> => {
       // Default title from filename
@@ -60,6 +100,8 @@ const App: React.FC = () => {
       let coverImage: string | undefined;
       let author: string | undefined;
       let publisher: string | undefined;
+      let pdfArrayBuffer: ArrayBuffer | undefined;
+      let pageCount: number | undefined;
       
       try {
         const lowerName = file.name.toLowerCase();
@@ -76,10 +118,12 @@ const App: React.FC = () => {
           const result = await parsePdf(file);
           content = result.content;
           coverImage = result.coverImage;
+          pdfArrayBuffer = result.pdfArrayBuffer;
+          pageCount = result.pageCount;
+          chapters = result.chapters;
+
           if (result.author) author = result.author;
           if (result.title && result.title.trim().length > 0) title = result.title;
-          
-          chapters = parseChapters(content);
         } else {
           // Parse TXT
           content = await new Promise<string>((resolve) => {
@@ -103,9 +147,14 @@ const App: React.FC = () => {
           
           chapters = parseChapters(content);
         }
+
+        // GENERATE DETERMINISTIC ID based on filename + size
+        // This ensures the same file on two devices gets the same ID.
+        const idSeed = `${file.name}_${file.size}`;
+        const id = generateId(idSeed);
   
         const newBook: BookData = {
-          id: generateId(),
+          id: id,
           title: title,
           author: author,
           publisher: publisher,
@@ -115,6 +164,8 @@ const App: React.FC = () => {
           createdAt: Date.now(),
           lastReadAt: Date.now(),
           coverImage: coverImage,
+          pdfArrayBuffer: pdfArrayBuffer,
+          pageCount: pageCount,
         };
         
         return newBook;
@@ -122,6 +173,27 @@ const App: React.FC = () => {
       } catch (err) {
         console.error(`Failed to import book: ${file.name}`, err);
         return null;
+      }
+  };
+
+  // Central helper to write sync file
+  const syncStateToDisk = async (handle: any, currentBooks: BookData[], currentSettings: ReaderSettings) => {
+      try {
+          const progressMap: Record<string, { pageIndex: number; lastReadAt: number }> = {};
+          currentBooks.forEach(b => {
+              progressMap[b.id] = { pageIndex: b.currentPageIndex, lastReadAt: b.lastReadAt };
+          });
+
+          const syncData: SyncState = {
+              updatedAt: Date.now(),
+              settings: currentSettings,
+              progress: progressMap
+          };
+
+          await writeSyncFile(handle, syncData);
+      } catch (e) {
+          console.error("Background sync write failed", e);
+          throw e; // Propagate for handling
       }
   };
 
@@ -138,31 +210,36 @@ const App: React.FC = () => {
        return name.endsWith('.txt') || name.endsWith('.epub') || name.endsWith('.pdf');
     });
 
-    if (validFiles.length === 0) {
-        alert("No supported files found (.txt, .epub, .pdf)");
-        setIsLoading(false);
-        return;
-    }
-
     try {
+        const newBooks = [...books];
+        let hasChanges = false;
+
         for (const file of validFiles) {
-            // Simple check to avoid exact duplicates by title/filename
-            const exists = books.some(b => b.title === file.name.replace(/\.(txt|epub|pdf)$/i, ''));
-            if (!exists) {
-               const book = await processFile(file);
-               if (book) {
-                 await saveBook(book);
-                 importedCount++;
+            const book = await processFile(file);
+            
+            if (book) {
+               // Check if book exists by ID (deterministic now)
+               const existingIndex = newBooks.findIndex(b => b.id === book.id);
+
+               if (existingIndex >= 0) {
+                  // Already exists, don't overwrite unless we want to update content
+                  console.log(`Book ${book.title} exists, skipping content overwrite.`);
+               } else {
+                  await saveBook(book);
+                  newBooks.push(book);
+                  importedCount++;
+                  hasChanges = true;
                }
             }
         }
         
-        if (importedCount > 0) {
+        if (hasChanges) {
            const updatedBooks = await getAllBooks();
            setBooks(updatedBooks);
-           alert(`Successfully imported ${importedCount} books.`);
-        } else {
-           alert("No new books imported (duplicates skipped).");
+           if (importedCount > 0 && !isSyncConnected) {
+              // Only alert if manual import (not sync scan)
+              alert(`Successfully imported ${importedCount} books.`);
+           }
         }
     } catch (err) {
         console.error("Bulk import error", err);
@@ -177,29 +254,155 @@ const App: React.FC = () => {
   };
 
   const handleImportFolder = async () => {
+     // Legacy scan folder (read-only scan)
      try {
-       // Check for modern API support
        // @ts-ignore
        if (window.showDirectoryPicker) {
            // @ts-ignore
            const dirHandle = await window.showDirectoryPicker();
            setIsLoading(true);
            const files = await scanDirectoryForFiles(dirHandle);
-           setIsLoading(false); // handleBooksImport sets it true again, but we need to reset to avoid stuck state if 0 files
+           setIsLoading(false);
            await handleBooksImport(files);
-       } else {
-           // This path shouldn't be reached if Bookshelf handles the fallback properly,
-           // but we keep it safe.
-           alert("Feature not supported in this browser.");
-       }
+       } 
      } catch (err) {
-       if ((err as Error).name !== 'AbortError') {
-          console.error("Folder import failed", err);
-          alert("Failed to access folder.");
-       }
+       console.error(err);
      } finally {
         setIsLoading(false);
      }
+  };
+
+  // --- SYNC FOLDER LOGIC ---
+
+  const handleConnectSyncFolder = async () => {
+      try {
+          // @ts-ignore
+          const dirHandle = await window.showDirectoryPicker({
+              mode: 'readwrite',
+              id: 'zenreader-sync' // Remembers the directory for this ID
+          });
+
+          if (!dirHandle) return;
+
+          // 1. Verify Permission
+          const granted = await verifyPermission(dirHandle, true);
+          if (!granted) {
+              alert("Permission denied. Cannot sync.");
+              return;
+          }
+
+          setIsLoading(true);
+          setSyncStatus('syncing');
+          
+          // 2. Save Handle & Set Connected
+          setSyncHandle(dirHandle);
+          await saveDirectoryHandle(dirHandle);
+
+          // 3. Read Sync File (if exists)
+          const remoteState = await readSyncFile(dirHandle);
+          
+          // 4. Scan for Books in this folder
+          const files = await scanDirectoryForFiles(dirHandle);
+          
+          // 5. Import Books (Non-destructive)
+          await handleBooksImport(files);
+
+          // 6. Merge State (Remote wins if newer, or basic merge)
+          const currentAllBooks = await getAllBooks();
+          let stateChanged = false;
+
+          if (remoteState) {
+              // Sync Settings
+              if (remoteState.settings) {
+                  setSettings(prev => ({ ...prev, ...remoteState.settings }));
+                  stateChanged = true;
+              }
+
+              // Sync Progress
+              if (remoteState.progress) {
+                  for (const book of currentAllBooks) {
+                      const remoteProg = remoteState.progress[book.id];
+                      if (remoteProg) {
+                          // If remote is more recent or just exists
+                          if (remoteProg.lastReadAt > book.lastReadAt || book.currentPageIndex === 0) {
+                              book.currentPageIndex = remoteProg.pageIndex;
+                              book.lastReadAt = remoteProg.lastReadAt;
+                              await updateBookProgress(book.id, book.currentPageIndex);
+                              stateChanged = true;
+                          }
+                      }
+                  }
+              }
+          }
+
+          // 7. INITIAL WRITE: Force creation of zenreader_sync.json immediately
+          // This ensures the "data structure" is created as requested
+          await syncStateToDisk(dirHandle, currentAllBooks, settings);
+
+          if (stateChanged) {
+             const reloaded = await getAllBooks();
+             setBooks(reloaded);
+          } else {
+             setBooks(currentAllBooks);
+          }
+          
+          // Now officially connected for auto-updates
+          setIsSyncConnected(true);
+          setSyncStatus('success');
+
+          alert("Sync Connected! Your library is now synced to this folder.");
+
+      } catch (err) {
+          if ((err as Error).name !== 'AbortError') {
+             console.error("Sync Connection Failed", err);
+             alert("Failed to connect sync folder.");
+             setSyncStatus('error');
+          } else {
+             setSyncStatus('idle');
+          }
+      } finally {
+          setIsLoading(false);
+          // Reset status to idle after a moment if success
+          setTimeout(() => setSyncStatus(prev => prev === 'success' ? 'idle' : prev), 3000);
+      }
+  };
+
+  // Re-connect on load if handle exists
+  const handleReconnectSync = async () => {
+      if (!syncHandle) return;
+      try {
+          const granted = await verifyPermission(syncHandle, true);
+          if (granted) {
+             setIsSyncConnected(true);
+             // Trigger a quick sync
+             const remoteState = await readSyncFile(syncHandle);
+             const files = await scanDirectoryForFiles(syncHandle);
+             await handleBooksImport(files);
+             
+             // Simple progress merge logic
+             const freshBooks = await getAllBooks();
+             if (remoteState && remoteState.progress) {
+                let updated = false;
+                for (const book of freshBooks) {
+                    const r = remoteState.progress[book.id];
+                    if (r && r.lastReadAt > book.lastReadAt) {
+                        book.currentPageIndex = r.pageIndex;
+                        book.lastReadAt = r.lastReadAt;
+                        await updateBookProgress(book.id, r.pageIndex);
+                        updated = true;
+                    }
+                }
+                if (updated) setBooks(await getAllBooks());
+             }
+             
+             alert("Sync Reconnected.");
+          } else {
+             alert("Permission not granted.");
+          }
+      } catch (e) {
+          console.error(e);
+          alert("Could not reconnect. Please select folder again.");
+      }
   };
 
   const handleExportBackup = async () => {
@@ -269,13 +472,22 @@ const App: React.FC = () => {
       chapters = parseChapters(book.content);
     }
 
-    // Ensure we don't start on a page that doesn't exist
-    const validPageIndex = Math.min(book.currentPageIndex, Math.max(0, chapters.length - 1));
+    const maxIndex = book.pdfArrayBuffer 
+       ? (book.pageCount ? book.pageCount - 1 : 0)
+       : Math.max(0, chapters.length - 1);
 
-    setActiveBook({ ...book, chapters, currentPageIndex: validPageIndex });
+    const validPageIndex = Math.min(book.currentPageIndex, maxIndex);
+
+    // Prepare book state
+    const updatedBook = { ...book, chapters, currentPageIndex: validPageIndex, lastReadAt: Date.now() };
+    setActiveBook(updatedBook);
     
-    // Update last read timestamp immediately
+    // Update DB immediately for read timestamp
     await updateBookProgress(book.id, validPageIndex);
+    
+    // Update 'books' state which triggers the Auto-Sync useEffect
+    setBooks(prevBooks => prevBooks.map(b => b.id === book.id ? updatedBook : b));
+
     setView('reader');
   };
 
@@ -284,26 +496,31 @@ const App: React.FC = () => {
       await deleteBook(id);
       const updatedBooks = await getAllBooks();
       setBooks(updatedBooks);
+      // Auto-sync useEffect will handle the deletion sync
     }
   };
 
   const handleUpdateSettings = (newSettings: Partial<ReaderSettings>) => {
     setSettings(prev => ({ ...prev, ...newSettings }));
+    // Auto-sync useEffect will handle the sync
   };
 
   const handlePageChange = async (pageIndex: number) => {
     if (activeBook) {
-      const updatedBook = { ...activeBook, currentPageIndex: pageIndex };
+      const updatedBook = { ...activeBook, currentPageIndex: pageIndex, lastReadAt: Date.now() };
       setActiveBook(updatedBook);
+      
       // Persist progress to DB
       await updateBookProgress(activeBook.id, pageIndex);
+      
+      // Update local books state (THIS TRIGGERS THE AUTO-SYNC EFFECT)
+      setBooks(prevBooks => prevBooks.map(b => b.id === activeBook.id ? updatedBook : b));
     }
   };
 
   const handleCloseBook = async () => {
     setView('shelf');
     setActiveBook(null);
-    // Refresh list to show updated timestamps/progress
     const updatedBooks = await getAllBooks();
     setBooks(updatedBooks);
   };
@@ -330,6 +547,10 @@ const App: React.FC = () => {
           onRestoreBackup={handleRestoreBackup}
           onOpenBook={handleOpenBook}
           onDeleteBook={handleDeleteBook}
+          onConnectSync={handleConnectSyncFolder}
+          onReconnectSync={handleReconnectSync}
+          isSyncConnected={isSyncConnected}
+          hasSyncHandle={!!syncHandle}
         />
       ) : activeBook ? (
         <>
@@ -340,6 +561,8 @@ const App: React.FC = () => {
             onOpenSettings={() => setIsSettingsOpen(true)}
             onCloseBook={handleCloseBook}
             onToggleFocusMode={() => handleUpdateSettings({ focusMode: !settings.focusMode })}
+            onUpdateSettings={handleUpdateSettings}
+            syncStatus={syncStatus}
           />
           <ControlPanel 
             isOpen={isSettingsOpen}
@@ -347,6 +570,7 @@ const App: React.FC = () => {
             settings={settings}
             onUpdateSettings={handleUpdateSettings}
             currentTheme={settings.theme}
+            isPdf={!!activeBook.pdfArrayBuffer}
           />
         </>
       ) : null}

@@ -1,3 +1,5 @@
+
+
 import React, { useEffect, useRef } from 'react';
 import { X, MapPin } from 'lucide-react';
 import { Chapter, ThemeType } from '../types';
@@ -7,7 +9,7 @@ interface TOCProps {
   isOpen: boolean;
   onClose: () => void;
   chapters: Chapter[];
-  currentChapterIndex: number;
+  currentChapterIndex: number; // This represents Chapter Index (EPUB) OR Page Index (PDF)
   onSelectChapter: (index: number) => void;
   currentTheme: ThemeType;
 }
@@ -74,13 +76,40 @@ export const TOC: React.FC<TOCProps> = ({
           className="flex-1 overflow-y-auto scrollbar-thin"
         >
           {chapters.map((chapter, index) => {
-            const isActive = index === currentChapterIndex;
+            // Logic for Highlighting:
+            // Case 1: PDF (Has pageNumber). currentChapterIndex is absolute page number (0-based)
+            // Case 2: EPUB/TXT. currentChapterIndex is chapter index.
+            
+            let isActive = false;
+            let onClickIndex = index;
+
+            if (chapter.pageNumber !== undefined) {
+               // PDF Mode: 
+               // currentChapterIndex is 0-based page index.
+               // chapter.pageNumber is 1-based page index.
+               
+               // To determine active chapter in TOC:
+               // The active chapter is the one where chapter.pageNumber <= (currentChapterIndex + 1)
+               // AND the next chapter's pageNumber > (currentChapterIndex + 1)
+               
+               const currentPage = currentChapterIndex + 1;
+               const thisPage = chapter.pageNumber;
+               const nextPage = chapters[index + 1]?.pageNumber ?? 999999;
+               
+               isActive = currentPage >= thisPage && currentPage < nextPage;
+               onClickIndex = thisPage - 1; // Convert 1-based page back to 0-based index for onSelectChapter
+            } else {
+               // Standard Mode
+               isActive = index === currentChapterIndex;
+               onClickIndex = index;
+            }
+
             return (
               <button
                 key={index}
                 ref={isActive ? activeItemRef : null}
                 onClick={() => {
-                  onSelectChapter(index);
+                  onSelectChapter(onClickIndex);
                   onClose();
                 }}
                 className={`
@@ -96,6 +125,11 @@ export const TOC: React.FC<TOCProps> = ({
                 <span className={`line-clamp-2 ${!isActive && 'pl-7'}`}>
                   {chapter.title}
                 </span>
+                {chapter.pageNumber && (
+                    <span className={`ml-auto text-xs ${isActive ? 'text-white/80' : 'text-gray-400'}`}>
+                        {chapter.pageNumber}
+                    </span>
+                )}
               </button>
             );
           })}
