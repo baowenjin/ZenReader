@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { Settings, ArrowLeft, List, Target, Sparkles, X, ExternalLink, BookOpen, GraduationCap } from 'lucide-react';
+import { Settings, ArrowLeft, ArrowRight, List, Target, Sparkles, X, ExternalLink, BookOpen, GraduationCap, ChevronLeft, ChevronRight } from 'lucide-react';
 import { BookData, ReaderSettings, AIEntityData } from '../types';
 import { THEMES, MOCK_AI_KNOWLEDGE_BASE } from '../constants';
 import { calculateProgress } from '../utils';
@@ -98,8 +98,6 @@ const Paragraph = React.memo(({
       className={containerClass}
       style={{
         textAlign: settings.textAlign,
-        // Responsive scroll scaling could be applied here conceptually, 
-        // but currently handled via native scroll hijacking in parent
       }}
     >
       <span className={textClass}>
@@ -134,13 +132,13 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   const isAutoScrolling = useRef(false);
   const scrollTimeoutRef = useRef<number | null>(null);
   const lastKeyTime = useRef<number>(0);
+  const controlsTimerRef = useRef<number | null>(null);
 
   const [isTOCOpen, setIsTOCOpen] = useState(false);
   const [activeParagraphIndex, setActiveParagraphIndex] = useState<number | null>(null);
 
-  // Sidebar Visibility State
-  const [isSidebarVisible, setSidebarVisible] = useState(true);
-  const sidebarTimerRef = useRef<number | null>(null);
+  // Controls Visibility State (Top/Bottom bars)
+  const [showControls, setShowControls] = useState(true);
 
   // AI Mode State
   const [selectedEntity, setSelectedEntity] = useState<AIEntityData | null>(null);
@@ -162,37 +160,46 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     setSelectedEntity(null);
   }, [book.currentPageIndex, settings.focusMode]);
 
-  // Sidebar Auto-Hide Logic
-  const showSidebar = useCallback(() => {
-    setSidebarVisible(true);
-    if (sidebarTimerRef.current) {
-      clearTimeout(sidebarTimerRef.current);
-      sidebarTimerRef.current = null;
+  // --- Auto-Hide Controls Logic ---
+
+  const resetControlsTimer = useCallback(() => {
+    if (controlsTimerRef.current) {
+      clearTimeout(controlsTimerRef.current);
+      controlsTimerRef.current = null;
     }
-  }, []);
 
-  const startSidebarHideTimer = useCallback(() => {
-    if (!settings.autoHideControls) return;
-    
-    if (sidebarTimerRef.current) clearTimeout(sidebarTimerRef.current);
-    
-    sidebarTimerRef.current = window.setTimeout(() => {
-      setSidebarVisible(false);
-    }, (settings.autoHideDuration || 5) * 1000);
-  }, [settings.autoHideControls, settings.autoHideDuration]);
+    if (settings.autoHideControls && showControls) {
+      controlsTimerRef.current = window.setTimeout(() => {
+        setShowControls(false);
+      }, (settings.autoHideDuration || 3) * 1000);
+    }
+  }, [settings.autoHideControls, settings.autoHideDuration, showControls]);
 
-  // Initial Sidebar Timer on mount/settings change
+  // Handle manual interaction to keep controls alive
+  const handleUserInteraction = useCallback(() => {
+    if (showControls) {
+      resetControlsTimer();
+    }
+  }, [showControls, resetControlsTimer]);
+
+  // Initial timer setup & cleanup
   useEffect(() => {
-    if (settings.autoHideControls) {
-      startSidebarHideTimer();
-    } else {
-      setSidebarVisible(true);
-    }
+    resetControlsTimer();
     return () => {
-      if (sidebarTimerRef.current) clearTimeout(sidebarTimerRef.current);
+      if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
     };
-  }, [settings.autoHideControls, startSidebarHideTimer]);
+  }, [resetControlsTimer]);
 
+  // Toggle controls on tap
+  const handleContentClick = useCallback((e: React.MouseEvent) => {
+    // Prevent toggling if text is selected
+    if (window.getSelection()?.toString().length) return;
+    
+    // Prevent toggling if clicking entity or interactive elements
+    if ((e.target as HTMLElement).closest('button, a')) return;
+
+    setShowControls(prev => !prev);
+  }, []);
 
   // --- FOCUS MODE LOGIC ---
 
@@ -226,19 +233,37 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     }, 600);
   }, []);
 
-  // Scroll Locking
+  // Responsive Scroll Scaling Logic
   useEffect(() => {
-    if (!settings.focusMode) return;
-    const preventDefault = (e: Event) => {
-      if (e.cancelable) e.preventDefault();
-    };
-    window.addEventListener('wheel', preventDefault, { passive: false });
-    window.addEventListener('touchmove', preventDefault, { passive: false });
-    return () => {
-      window.removeEventListener('wheel', preventDefault);
-      window.removeEventListener('touchmove', preventDefault);
-    };
-  }, [settings.focusMode]);
+     if (settings.focusMode) return; // Focus mode handles scrolling differently
+
+     const handleWheel = (e: WheelEvent) => {
+       // Only hijack vertical scroll
+       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+
+       e.preventDefault();
+
+       const baseFontSize = 16;
+       const currentFontSize = settings.fontSize;
+       const fontSizeRatio = currentFontSize / baseFontSize;
+       
+       const scrollMultiplier = fontSizeRatio * 1.5;
+       const scrollAmount = e.deltaY * scrollMultiplier;
+
+       window.scrollBy({
+         top: scrollAmount,
+         behavior: 'auto' 
+       });
+       
+       // Hide controls on scroll if needed
+       if (Math.abs(e.deltaY) > 20 && showControls && settings.autoHideControls) {
+          setShowControls(false);
+       }
+     };
+
+     window.addEventListener('wheel', handleWheel, { passive: false });
+     return () => window.removeEventListener('wheel', handleWheel);
+  }, [settings.focusMode, settings.fontSize, showControls, settings.autoHideControls]);
 
   // Keyboard Navigation
   useEffect(() => {
@@ -286,13 +311,14 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
         case 'Escape':
           if (isTOCOpen) setIsTOCOpen(false);
           else if (selectedEntity) setSelectedEntity(null);
-          else onCloseBook();
+          else if (showControls) onCloseBook();
+          else setShowControls(true);
           break;
       }
     };
     window.addEventListener('keydown', handleKeyDown, { passive: false });
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [book.currentPageIndex, totalChapters, isTOCOpen, selectedEntity, settings.focusMode, activeParagraphIndex, scrollToParagraph]);
+  }, [book.currentPageIndex, totalChapters, isTOCOpen, selectedEntity, settings.focusMode, activeParagraphIndex, scrollToParagraph, showControls]);
 
   // Intersection Observer
   useEffect(() => {
@@ -345,7 +371,6 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
   const isParagraphFocused = (index: number) => {
     if (!settings.focusMode || activeParagraphIndex === null) return true;
-    // Default to 1 per request
     const count = settings.focusParagraphCount || 1; 
     const half = Math.floor(count / 2);
     const start = activeParagraphIndex - half;
@@ -355,17 +380,10 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
   if (!currentChapter) return null;
 
-  // Split content into paragraphs
   const paragraphs = currentChapter.content.split('\n').filter(p => p.trim().length > 0);
 
   return (
     <div className={`min-h-screen flex flex-row transition-colors duration-500 ${themeStyles.bg} ${themeStyles.text} overflow-x-hidden`}>
-      
-      {/* TRIGGER ZONE (Left Edge) */}
-      <div 
-        className="fixed left-0 top-0 bottom-0 w-4 z-[60] bg-transparent"
-        onMouseEnter={showSidebar}
-      />
 
       {/* TOOLTIP */}
       {hoveredEntity && !selectedEntity && (
@@ -382,71 +400,109 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
         </div>
       )}
 
-      {/* LEFT SIDEBAR */}
+      {/* TOP BAR */}
       <div 
         className={`
-          fixed left-0 top-0 bottom-0 w-16 z-50 flex flex-col items-center py-6 gap-6
-          border-r backdrop-blur-sm transition-transform duration-500 ease-[cubic-bezier(0.2,0,0,1)]
-          ${themeStyles.uiBg} ${themeStyles.border}
-          ${isSidebarVisible ? 'translate-x-0' : '-translate-x-full'}
+          fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3
+          transition-transform duration-300 ease-[cubic-bezier(0.2,0,0,1)]
+          bg-white/90 backdrop-blur-md border-b shadow-sm
+          ${themeStyles.text} ${themeStyles.border}
+          ${settings.theme === 'dark' ? 'bg-[#242424]/90' : settings.theme === 'sepia' ? 'bg-[#F2F0E9]/90' : 'bg-white/90'}
+          ${showControls ? 'translate-y-0' : '-translate-y-full'}
         `}
-        onMouseEnter={showSidebar}
-        onMouseLeave={startSidebarHideTimer}
+        onClick={handleUserInteraction}
       >
-        <button 
-          onClick={onCloseBook}
-          className={`p-3 rounded-full ${themeStyles.hover} transition-all group`}
-          title="Back"
+         <button 
+           onClick={onCloseBook}
+           className={`p-2 rounded-full ${themeStyles.hover} transition-all group`}
+           title="Back to Shelf"
+         >
+           <ArrowLeft className="w-5 h-5" />
+         </button>
+         
+         <div className="flex-1 text-center mx-4">
+            <h1 className="text-sm font-bold truncate max-w-md mx-auto">{currentChapter.title}</h1>
+         </div>
+
+         <div className="text-xs font-mono font-medium opacity-60 w-8 text-right">
+            {progress}%
+         </div>
+      </div>
+
+      {/* BOTTOM BAR */}
+      <div 
+        className={`
+          fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4
+          transition-transform duration-300 ease-[cubic-bezier(0.2,0,0,1)]
+          bg-white/90 backdrop-blur-md border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]
+          ${themeStyles.text} ${themeStyles.border}
+          ${settings.theme === 'dark' ? 'bg-[#242424]/90' : settings.theme === 'sepia' ? 'bg-[#F2F0E9]/90' : 'bg-white/90'}
+          ${showControls ? 'translate-y-0' : 'translate-y-full'}
+        `}
+        onClick={handleUserInteraction}
+      >
+        {/* Previous Chapter */}
+        <button
+           onClick={() => book.currentPageIndex > 0 && onPageChange(book.currentPageIndex - 1)}
+           disabled={book.currentPageIndex === 0}
+           className={`p-3 rounded-full ${themeStyles.hover} disabled:opacity-30 transition-colors`}
         >
-          <ArrowLeft className={`w-5 h-5 ${themeStyles.icon}`} />
+           <ChevronLeft className="w-5 h-5" />
         </button>
 
-        <div className="flex-1 flex flex-col items-center gap-6 justify-center">
-            <button
-              onClick={() => setIsTOCOpen(true)}
-              className={`p-3 rounded-full ${themeStyles.hover} transition-colors`}
-              title="TOC"
-            >
-              <List className={`w-5 h-5 ${themeStyles.icon}`} />
-            </button>
+        {/* Tools Group */}
+        <div className="flex items-center gap-6">
+           <button
+             onClick={() => setIsTOCOpen(true)}
+             className={`p-3 rounded-full ${themeStyles.hover} transition-colors`}
+             title="Table of Contents"
+           >
+             <List className="w-5 h-5" />
+           </button>
 
-             <button 
-               onClick={onToggleFocusMode}
-               className={`p-3 rounded-full transition-colors ${settings.focusMode ? 'bg-blue-100' : themeStyles.hover}`}
-               title="Focus Mode"
-             >
-                <Target className={`w-5 h-5 ${settings.focusMode ? 'text-blue-600' : themeStyles.icon}`} />
-             </button>
+           <button 
+             onClick={onToggleFocusMode}
+             className={`p-3 rounded-full transition-colors ${settings.focusMode ? 'bg-blue-100 text-blue-600' : themeStyles.hover}`}
+             title="Focus Mode"
+           >
+              <Target className="w-5 h-5" />
+           </button>
 
-             <button
-               onClick={() => onOpenSettings()}
-               className={`p-3 rounded-full transition-colors cursor-pointer ${settings.aiMode ? 'bg-amber-100' : themeStyles.hover}`}
-               title="AI Companion"
-             >
-                <Sparkles className={`w-5 h-5 ${settings.aiMode ? 'text-amber-600' : themeStyles.icon}`} />
-             </button>
+           <button
+             onClick={() => onOpenSettings()}
+             className={`p-3 rounded-full transition-colors ${settings.aiMode ? 'bg-amber-100 text-amber-600' : themeStyles.hover}`}
+             title="AI Companion"
+           >
+              <Sparkles className="w-5 h-5" />
+           </button>
 
-            <button 
-              onClick={onOpenSettings}
-              className={`p-3 rounded-full ${themeStyles.hover} transition-colors`}
-              title="Settings"
-            >
-              <Settings className={`w-5 h-5 ${themeStyles.icon}`} />
-            </button>
+           <button 
+             onClick={onOpenSettings}
+             className={`p-3 rounded-full ${themeStyles.hover} transition-colors`}
+             title="Settings"
+           >
+             <Settings className="w-5 h-5" />
+           </button>
         </div>
 
-        <div className="flex flex-col items-center text-[10px] font-mono opacity-50 gap-1">
-             <span>{progress}%</span>
-        </div>
+        {/* Next Chapter */}
+        <button
+           onClick={() => book.currentPageIndex < totalChapters - 1 && onPageChange(book.currentPageIndex + 1)}
+           disabled={book.currentPageIndex === totalChapters - 1}
+           className={`p-3 rounded-full ${themeStyles.hover} disabled:opacity-30 transition-colors`}
+        >
+           <ChevronRight className="w-5 h-5" />
+        </button>
       </div>
 
       {/* MAIN CONTENT */}
       <main 
+        onClick={handleContentClick}
         className={`
           flex-1 flex justify-center w-full min-h-screen transition-all duration-300
-          ${isSidebarVisible ? 'pl-16' : 'pl-0'}
-          ${selectedEntity ? 'pr-[24rem]' : 'pr-4'} 
+          ${selectedEntity ? 'pr-[24rem]' : ''} 
           ${settings.focusMode ? 'py-0' : 'py-20'} 
+          cursor-pointer
         `}
         style={{
            // Apply padding for Typewriter effect in Focus Mode
@@ -456,7 +512,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
       >
         <div 
           ref={contentRef}
-          className={`w-full select-text transition-all duration-300 ease-in-out`}
+          className={`w-full select-text transition-all duration-300 ease-in-out px-4`}
           style={{ 
             maxWidth: settings.maxWidth,
             fontSize: settings.fontSize,
@@ -471,9 +527,9 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
               : 'Merriweather, "Songti SC", serif'
           }}
         >
-          {/* Chapter Title */}
+          {/* Chapter Title in Body (Hidden in Focus Mode) */}
           {!settings.focusMode && (
-            <h1 className="text-3xl font-bold mb-12 text-center opacity-80">{currentChapter.title}</h1>
+            <h1 className="text-3xl font-bold mb-12 text-center opacity-80 pt-10">{currentChapter.title}</h1>
           )}
 
           {/* Paragraphs */}
@@ -492,14 +548,31 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
              />
           ))}
 
-          {/* Pagination Hints (Standard Mode) */}
+          {/* Pagination Hints (Body Bottom) */}
           {!settings.focusMode && (
-            <div className="mt-20 flex justify-center gap-8 opacity-40">
-              <button onClick={() => book.currentPageIndex > 0 && onPageChange(book.currentPageIndex - 1)} className="hover:opacity-100">
-                Previous Chapter
+            <div className="mt-20 flex justify-between gap-4 max-w-2xl mx-auto px-6 pb-32">
+              <button 
+                onClick={(e) => { e.stopPropagation(); book.currentPageIndex > 0 && onPageChange(book.currentPageIndex - 1); }}
+                disabled={book.currentPageIndex === 0}
+                className={`
+                   flex items-center gap-2 px-6 py-3 rounded-full transition-all duration-200 font-medium text-sm
+                   bg-black/5 hover:bg-black/10 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-black/5
+                `}
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Previous</span>
               </button>
-              <button onClick={() => book.currentPageIndex < totalChapters - 1 && onPageChange(book.currentPageIndex + 1)} className="hover:opacity-100">
-                Next Chapter
+              
+              <button 
+                onClick={(e) => { e.stopPropagation(); book.currentPageIndex < totalChapters - 1 && onPageChange(book.currentPageIndex + 1); }}
+                disabled={book.currentPageIndex === totalChapters - 1}
+                className={`
+                   flex items-center gap-2 px-6 py-3 rounded-full transition-all duration-200 font-medium text-sm
+                   bg-black/5 hover:bg-black/10 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-black/5
+                `}
+              >
+                <span>Next Chapter</span>
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           )}

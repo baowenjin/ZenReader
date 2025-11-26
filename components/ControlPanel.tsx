@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { 
-  X, Sun, Moon, Coffee, Minus, Plus, AlignLeft, AlignJustify, Target, Sparkles, Layers
+  X, Sun, Moon, Coffee, Minus, Plus, AlignLeft, AlignJustify, Target, Sparkles, Layers, EyeOff, Clock
 } from 'lucide-react';
 import { ReaderSettings, ThemeType, FontFamily } from '../types';
 import { THEMES, FONT_LABELS, FONT_FAMILIES } from '../constants';
@@ -191,6 +191,48 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                   onChange={(e) => onUpdateSettings({ maxWidth: parseInt(e.target.value) })}
                   className="w-full accent-blue-500 h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
                />
+            </div>
+
+            {/* Immersion Settings */}
+            <div className="pt-4 border-t border-gray-200/20 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                   <EyeOff className="w-4 h-4" />
+                   <span>Auto-hide Toolbar</span>
+                </div>
+                <button
+                  onClick={() => onUpdateSettings({ autoHideControls: !settings.autoHideControls })}
+                  className={`
+                    relative inline-flex h-6 w-11 items-center rounded-full transition-colors
+                    ${settings.autoHideControls ? 'bg-blue-500' : 'bg-gray-300'}
+                  `}
+                >
+                  <span
+                    className={`
+                      inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                      ${settings.autoHideControls ? 'translate-x-6' : 'translate-x-1'}
+                    `}
+                  />
+                </button>
+              </div>
+
+              {settings.autoHideControls && (
+                <div className="pl-6 pr-1 space-y-2 animate-in slide-in-from-top-2 duration-200">
+                  <div className="flex justify-between text-xs opacity-70">
+                     <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> Hide Delay</span>
+                     <span>{settings.autoHideDuration || 3}s</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="2" 
+                    max="10" 
+                    step="1"
+                    value={settings.autoHideDuration || 3} 
+                    onChange={(e) => onUpdateSettings({ autoHideDuration: parseInt(e.target.value) })}
+                    className="w-full accent-blue-500 h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Focus Mode & AI Mode */}

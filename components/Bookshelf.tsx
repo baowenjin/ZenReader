@@ -208,7 +208,7 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
           <input type="file" ref={backupInputRef} className="hidden" accept=".json" onChange={(e) => e.target.files?.[0] && onRestoreBackup(e.target.files[0])} />
         </div>
 
-        {/* Tabs - No separator, tight spacing */}
+        {/* Tabs */}
         <div className="flex items-center gap-6 overflow-x-auto no-scrollbar mb-8">
           {TABS.map((tab) => (
             <button
@@ -231,30 +231,27 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
           onDrop={handleDrop}
         >
           
-          {/* Add Book Card - Tech/Rational Design */}
+          {/* Add Book Card - Modern Minimalist */}
           {books.length === 0 && (
             <div 
               onClick={() => fileInputRef.current?.click()}
               className="
                 group relative aspect-[2/3] w-full 
                 flex flex-col items-center justify-center
-                border border-gray-200 bg-white
+                border-2 border-dashed border-gray-200 
+                rounded-2xl bg-gray-50/50
                 cursor-pointer transition-all duration-300
-                hover:border-gray-400 hover:bg-gray-50
+                hover:border-gray-300 hover:bg-white hover:shadow-sm
               "
             >
-               {/* Tech Corners */}
-               <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-gray-300 group-hover:border-gray-900 transition-colors"></div>
-               <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-gray-300 group-hover:border-gray-900 transition-colors"></div>
-               <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-gray-300 group-hover:border-gray-900 transition-colors"></div>
-               <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-gray-300 group-hover:border-gray-900 transition-colors"></div>
-
                {/* Icon */}
-               <Plus className="w-8 h-8 text-gray-300 stroke-[0.5] group-hover:text-gray-800 group-hover:stroke-[1] transition-all duration-300" />
+               <div className="p-4 rounded-full bg-white shadow-sm border border-gray-100 group-hover:scale-110 transition-transform duration-300">
+                 <Plus className="w-6 h-6 text-gray-400 group-hover:text-gray-600 transition-colors" />
+               </div>
 
                {/* Label */}
-               <div className="absolute bottom-6 text-[10px] font-mono tracking-widest text-gray-400 group-hover:text-gray-600 transition-colors uppercase">
-                 Import_Data
+               <div className="mt-4 text-[11px] font-sans font-medium text-gray-400 group-hover:text-gray-600 transition-colors tracking-wide">
+                 ADD BOOK
                </div>
             </div>
           )}
@@ -273,7 +270,7 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
                 onMouseLeave={() => setIsHoveringId(null)}
               >
                 {/* Book Cover */}
-                <div className="relative aspect-[2/3] w-full bg-white shadow-sm border border-gray-200 overflow-hidden transition-transform duration-300 group-hover:-translate-y-1">
+                <div className="relative aspect-[2/3] w-full bg-white shadow-sm border border-gray-200 overflow-hidden rounded-md transition-transform duration-300 group-hover:-translate-y-1">
                   {book.coverImage ? (
                     <img src={book.coverImage} alt={book.title} className="w-full h-full object-cover grayscale-[20%] group-hover:grayscale-0 transition-all duration-500" />
                   ) : (
