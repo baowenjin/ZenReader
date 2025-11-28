@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Plus, Search, Trash2, FolderInput, Download, ChevronDown, FileText, FileUp, FileDown, Cloud, RefreshCw, Check, Settings2, Folder, Library, X } from 'lucide-react';
+import { Plus, Search, Trash2, FolderInput, Download, ChevronDown, FileText, FileUp, FileDown, Cloud, RefreshCw, Check, Settings2, Folder, Library, X, CloudOff, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { BookData } from '../types';
 import { calculateProgress } from '../utils';
 import { translations, Locale } from '../locales';
@@ -17,6 +17,7 @@ interface BookshelfProps {
   onManualSync: () => void;
   isSyncConnected: boolean;
   syncFolderName: string | null;
+  syncStatus?: 'idle' | 'syncing' | 'success' | 'error';
   language: Locale;
 }
 
@@ -34,6 +35,7 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
   onManualSync,
   isSyncConnected,
   syncFolderName,
+  syncStatus = 'idle',
   language
 }) => {
   const t = translations[language];
@@ -245,6 +247,15 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
     zIndex: 9999
   } : undefined;
 
+  // Icon Logic
+  const getSyncIcon = () => {
+    if (!isSyncConnected) return <CloudOff className="w-4 h-4 text-gray-400" />;
+    if (syncStatus === 'syncing') return <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />;
+    if (syncStatus === 'success') return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
+    if (syncStatus === 'error') return <AlertCircle className="w-4 h-4 text-red-500" />;
+    return <Cloud className="w-4 h-4 text-blue-600" />;
+  };
+
   return (
     <div 
       ref={wrapperRef}
@@ -354,11 +365,11 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
                   className={`
                     flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all text-sm font-medium
                     ${activeMenu === 'sync' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}
-                    ${isSyncConnected ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50' : ''}
+                    ${isSyncConnected ? 'bg-blue-50/50 text-blue-700 hover:bg-blue-50' : ''}
                   `}
                   title={t.sync}
                 >
-                  <Cloud className="w-4 h-4" />
+                  {getSyncIcon()}
                   <span className="hidden sm:inline">{t.sync}</span>
                   <ChevronDown className={`w-3 h-3 opacity-50 transition-transform ${activeMenu === 'sync' ? 'rotate-180' : ''}`} />
                 </button>

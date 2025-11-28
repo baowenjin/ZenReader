@@ -1,7 +1,5 @@
-
-
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { Settings, ArrowLeft, ArrowRight, List, Target, Sparkles, X, ChevronLeft, ChevronRight, Loader2, Languages, Copy, StickyNote, Scan, Scaling, Minus, Plus, Maximize, Columns, File, Scroll, Cloud, CheckCircle2, AlertCircle, Clock, BookOpenCheck } from 'lucide-react';
+import { Settings, ArrowLeft, ArrowRight, List, Target, Sparkles, X, ChevronLeft, ChevronRight, Loader2, Languages, Copy, StickyNote, Scan, Scaling, Minus, Plus, Maximize, Columns, File, Scroll, Cloud, CheckCircle2, AlertCircle, Clock, BookOpenCheck, CloudOff } from 'lucide-react';
 import { BookData, ReaderSettings, AIEntityData, PdfViewMode, PdfFitMode } from '../types';
 import { THEMES } from '../constants';
 import { calculateProgress, ensurePdfLibraryLoaded } from '../utils';
@@ -454,6 +452,7 @@ interface ReaderViewProps {
   onToggleFocusMode: () => void;
   onUpdateSettings: (newSettings: Partial<ReaderSettings>) => void;
   syncStatus?: 'idle' | 'syncing' | 'success' | 'error';
+  isSyncConnected?: boolean;
   language: Locale;
 }
 
@@ -466,6 +465,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   onToggleFocusMode,
   onUpdateSettings,
   syncStatus = 'idle',
+  isSyncConnected = false,
   language
 }) => {
   const t = translations[language];
@@ -909,6 +909,15 @@ ${langInstruction}`;
 
   const paragraphs = currentChapter?.content.split('\n').filter(p => p.trim().length > 0) || [];
 
+  // Icon Logic
+  const getSyncIcon = () => {
+    if (!isSyncConnected) return <CloudOff className="w-3.5 h-3.5 opacity-40" />;
+    if (syncStatus === 'syncing') return <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />;
+    if (syncStatus === 'success') return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />;
+    if (syncStatus === 'error') return <AlertCircle className="w-3.5 h-3.5 text-red-500" />;
+    return <Cloud className="w-3.5 h-3.5 opacity-60" />;
+  };
+
   return (
     <div className={`relative min-h-screen flex flex-row transition-colors duration-500 ${themeStyles.bg} ${themeStyles.text} overflow-x-hidden`}>
       
@@ -980,14 +989,10 @@ ${langInstruction}`;
 
          {/* Right: Status Info */}
          <div className="flex items-center gap-3 sm:gap-4 text-xs font-medium opacity-80">
-             {/* Sync Status */}
-             {syncStatus !== 'idle' && (
-               <div className="flex items-center gap-1.5" title={syncStatus === 'syncing' ? 'Syncing...' : syncStatus === 'success' ? 'Saved' : 'Sync Error'}>
-                 {syncStatus === 'syncing' && <Loader2 className="w-3 h-3 animate-spin text-blue-500" />}
-                 {syncStatus === 'success' && <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
-                 {syncStatus === 'error' && <AlertCircle className="w-3 h-3 text-red-500" />}
-               </div>
-             )}
+             {/* Sync Status - Icons Only */}
+             <div className="flex items-center gap-1.5" title={!isSyncConnected ? 'Local Only' : syncStatus === 'syncing' ? 'Syncing...' : syncStatus === 'success' ? 'Saved' : 'Sync Error'}>
+                 {getSyncIcon()}
+             </div>
              
              {/* Time */}
              <div className="hidden sm:flex items-center gap-1.5 font-mono" title="Current Time">

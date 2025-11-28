@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Bookshelf } from './components/Bookshelf';
 import { ReaderView } from './components/ReaderView';
@@ -653,6 +651,7 @@ const App: React.FC = () => {
           onManualSync={handleManualSync}
           isSyncConnected={isSyncConnected}
           syncFolderName={syncFolderName}
+          syncStatus={syncStatus}
           language={currentLocale}
         />
       ) : activeBook ? (
@@ -666,6 +665,7 @@ const App: React.FC = () => {
             onToggleFocusMode={() => handleUpdateSettings({ focusMode: !settings.focusMode })}
             onUpdateSettings={handleUpdateSettings}
             syncStatus={syncStatus}
+            isSyncConnected={isSyncConnected}
             language={currentLocale}
           />
           <ControlPanel 
