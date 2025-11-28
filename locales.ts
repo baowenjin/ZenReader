@@ -1,4 +1,5 @@
 
+
 export type Locale = 'en' | 'zh';
 
 export const translations = {
@@ -17,6 +18,7 @@ export const translations = {
     delete_local_hint: '从同步文件夹中移除',
     cancel: '取消',
     delete: '删除',
+    total_books: '共 {count} 本书',
     
     // Tabs
     tab_default: '默认',
@@ -104,6 +106,7 @@ export const translations = {
     delete_local_hint: 'Remove from sync folder',
     cancel: 'Cancel',
     delete: 'Delete',
+    total_books: '{count} items',
 
     // Tabs
     tab_default: 'Default',

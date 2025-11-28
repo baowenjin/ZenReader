@@ -1,7 +1,5 @@
-
-
 import React, { useRef, useState, useEffect } from 'react';
-import { Plus, Search, Trash2, FolderInput, Download, ChevronDown, FileText, FileUp, FileDown, Cloud, RefreshCw, Check, Settings2, Folder, Library } from 'lucide-react';
+import { Plus, Search, Trash2, FolderInput, Download, ChevronDown, FileText, FileUp, FileDown, Cloud, RefreshCw, Check, Settings2, Folder, Library, X } from 'lucide-react';
 import { BookData } from '../types';
 import { calculateProgress } from '../utils';
 import { translations, Locale } from '../locales';
@@ -63,6 +61,7 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isHoveringId, setIsHoveringId] = useState<string | null>(null);
   const [activeMenu, setActiveMenu] = useState<'import' | 'export' | 'sync' | null>(null);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -118,19 +117,13 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
     if (e.target) e.target.value = '';
   };
 
-  // Improved Folder Scan Logic with Fallback
   const handleScanFolderClick = async () => {
     setActiveMenu(null);
     let success = false;
-    
-    // Check if modern File System Access API is supported (better experience)
     // @ts-ignore
     if (window.showDirectoryPicker) {
-      // Try the modern API. If it fails (e.g. iframe), it returns false.
       success = await onImportFolder();
     } 
-
-    // If modern API is missing OR failed, use legacy fallback
     if (!success) {
       folderInputRef.current?.click();
     }
@@ -138,7 +131,6 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
 
   // --- MOUSE SELECTION LOGIC ---
   const handleMouseDown = (e: React.MouseEvent) => {
-    // Start selection if clicking on the main wrapper or selection zone
     const isWrapper = e.target === wrapperRef.current;
     const isSelectionZone = (e.target as HTMLElement).classList?.contains('selection-zone');
 
@@ -150,7 +142,6 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
       const startY = e.clientY;
       setSelectionBox({ startX, startY, currentX: startX, currentY: startY });
 
-      // If holding Shift/Ctrl, keep existing selection as base
       if (e.shiftKey || e.ctrlKey || e.metaKey) {
         setInitialSelection(new Set(selectedIds));
       } else {
@@ -165,17 +156,14 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
     
     setSelectionBox(prev => prev ? ({ ...prev, currentX: e.clientX, currentY: e.clientY }) : null);
     
-    // Calculate selection rect
     const left = Math.min(selectionBox.startX, e.clientX);
     const top = Math.min(selectionBox.startY, e.clientY);
     const width = Math.abs(e.clientX - selectionBox.startX);
     const height = Math.abs(e.clientY - selectionBox.startY);
     const selectRect = { left, top, right: left + width, bottom: top + height };
 
-    // Start with the selection state from before drag started
     const nextSelection = new Set(initialSelection);
     
-    // Check intersections
     const booksElements = document.querySelectorAll('[data-book-id]');
     booksElements.forEach((el) => {
         const rect = el.getBoundingClientRect();
@@ -242,7 +230,6 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
     setDeleteLocalFiles(false);
   };
 
-  // Check browser support for Sync
   // @ts-ignore
   const showSyncButton = !!window.showDirectoryPicker;
 
@@ -261,7 +248,7 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
   return (
     <div 
       ref={wrapperRef}
-      className="min-h-screen bg-[#FBFBFD] text-gray-900 pb-20 font-sans select-none"
+      className="min-h-screen bg-[#FBFBFD] text-gray-900 font-sans select-none"
       onMouseDown={handleMouseDown}
     >
       {/* Selection Box Visual */}
@@ -313,52 +300,51 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
          </div>
       )}
       
-      {/* Top Search Bar & Header Area */}
-      <div className="bg-white/80 backdrop-blur-xl sticky top-0 z-30 border-b border-gray-200/60 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-3">
-          <div className="flex items-center justify-between gap-4">
-             {/* Logo / Title Area */}
-             <div className="flex items-center gap-3">
-               <div className="w-8 h-8 bg-gray-900 text-white rounded-lg flex items-center justify-center">
-                  <Library className="w-5 h-5" />
-               </div>
-               <span className="font-serif font-bold text-lg tracking-tight hidden sm:block">ZenReader</span>
-             </div>
-
-             {/* Centered Search */}
-             <div className="flex-1 max-w-md mx-auto">
-                <div className="bg-gray-100/80 hover:bg-gray-100 transition-colors rounded-lg h-9 flex items-center px-3 gap-2 text-gray-400 focus-within:text-gray-800 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:shadow-sm transition-all duration-200">
-                  <Search className="w-4 h-4" />
-                  <input 
-                    type="text"
-                    placeholder={t.search_placeholder}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="bg-transparent border-none outline-none text-sm w-full placeholder-gray-400 text-gray-800"
-                  />
-                </div>
-             </div>
-
-             {/* Right Spacer (to balance logo) */}
-             <div className="w-8 hidden sm:block"></div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 md:px-6 pt-8 md:pt-12">
+      {/* Main Layout */}
+      <div className="max-w-7xl mx-auto px-4 md:px-8 pt-8 md:pt-16 pb-20">
         
-        {/* Main Header Row */}
-        <div className="flex items-end justify-between mb-8 pointer-events-none">
-          <div className="flex items-center gap-4 pointer-events-auto">
-              <h1 className="text-[28px] font-semibold text-gray-900 tracking-tight leading-none">{t.bookshelf_title}</h1>
-              {selectedIds.size > 0 && (
-                <div className="text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full animate-in fade-in slide-in-from-left-2">
-                  {selectedIds.size} {t.selected}
-                </div>
-              )}
+        {/* Header Row: Flex container for single line layout */}
+        <div className="flex items-center justify-between gap-4 mb-8">
+          
+          {/* Left Side: Title & Search */}
+          <div className="flex items-center gap-4 md:gap-6 flex-1 min-w-0">
+              <div className="flex items-baseline gap-2 shrink-0">
+                  <h1 className="text-2xl md:text-3xl font-serif font-bold text-gray-900 tracking-tight leading-none">
+                    {t.bookshelf_title}
+                  </h1>
+                  {selectedIds.size > 0 && (
+                    <span className="text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full animate-in fade-in">
+                      {selectedIds.size}
+                    </span>
+                  )}
+              </div>
+
+              {/* Search Bar - Inline and Compact */}
+              <div className={`
+                 group relative flex items-center transition-all duration-300 ease-out
+                 ${isSearchFocused || searchQuery ? 'w-full max-w-xs bg-white shadow-sm ring-1 ring-gray-200' : 'w-48 bg-transparent hover:bg-gray-100/50'}
+                 rounded-lg h-8 px-2
+              `}>
+                 <Search className={`w-3.5 h-3.5 mr-2 flex-shrink-0 transition-colors ${isSearchFocused ? 'text-gray-600' : 'text-gray-400'}`} />
+                 <input 
+                   type="text"
+                   placeholder={t.search_placeholder}
+                   value={searchQuery}
+                   onChange={(e) => setSearchQuery(e.target.value)}
+                   onFocus={() => setIsSearchFocused(true)}
+                   onBlur={() => setIsSearchFocused(false)}
+                   className="w-full bg-transparent border-none outline-none text-sm text-gray-800 placeholder-gray-400 focus:ring-0 p-0"
+                 />
+                 {searchQuery && (
+                   <button onClick={() => setSearchQuery('')} className="ml-1 p-0.5 rounded-full hover:bg-gray-200 text-gray-400">
+                      <X className="w-3 h-3" />
+                   </button>
+                 )}
+              </div>
           </div>
           
-          <div className="flex items-center gap-3 md:gap-4 pointer-events-auto">
+          {/* Right Side: Actions */}
+          <div className="flex items-center gap-2 shrink-0">
             
             {/* Sync Dropdown */}
             {showSyncButton && (
@@ -366,18 +352,19 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
                 <button
                   onClick={() => setActiveMenu(activeMenu === 'sync' ? null : 'sync')}
                   className={`
-                    flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors
-                    ${activeMenu === 'sync' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}
-                    ${isSyncConnected ? 'text-blue-600' : ''}
+                    flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all text-sm font-medium
+                    ${activeMenu === 'sync' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}
+                    ${isSyncConnected ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50' : ''}
                   `}
+                  title={t.sync}
                 >
-                  <Cloud className="w-[18px] h-[18px]" />
-                  <span className="text-[14px] hidden md:inline font-normal">{t.sync}</span>
+                  <Cloud className="w-4 h-4" />
+                  <span className="hidden sm:inline">{t.sync}</span>
                   <ChevronDown className={`w-3 h-3 opacity-50 transition-transform ${activeMenu === 'sync' ? 'rotate-180' : ''}`} />
                 </button>
 
                 {activeMenu === 'sync' && (
-                  <div className="absolute top-full right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-40 animate-in fade-in zoom-in-95 duration-100 origin-top-right ring-1 ring-black/5">
+                  <div className="absolute top-full right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-40 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
                       {/* Status Header */}
                       <div className="px-4 py-3 bg-gray-50/50 border-b border-gray-100">
                         <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">{t.sync_status}</div>
@@ -435,17 +422,18 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
               <button
                 onClick={() => setActiveMenu(activeMenu === 'import' ? null : 'import')}
                 className={`
-                  flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors
-                  ${activeMenu === 'import' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}
+                  flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors text-sm font-medium
+                  ${activeMenu === 'import' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}
                 `}
+                title={t.import}
               >
-                <Plus className="w-[18px] h-[18px]" />
-                <span className="text-[14px] hidden md:inline font-normal">{t.import}</span>
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">{t.import}</span>
                 <ChevronDown className={`w-3 h-3 opacity-50 transition-transform ${activeMenu === 'import' ? 'rotate-180' : ''}`} />
               </button>
 
               {activeMenu === 'import' && (
-                <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-40 animate-in fade-in zoom-in-95 duration-100 origin-top-right ring-1 ring-black/5">
+                <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-40 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
                     <div className="p-1.5 space-y-0.5">
                       <button
                         onClick={() => { setActiveMenu(null); fileInputRef.current?.click(); }}
@@ -479,17 +467,18 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
               <button
                 onClick={() => setActiveMenu(activeMenu === 'export' ? null : 'export')}
                 className={`
-                  flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors
-                  ${activeMenu === 'export' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}
+                  flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors text-sm font-medium
+                  ${activeMenu === 'export' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}
                 `}
+                title={t.export}
               >
-                <Download className="w-[18px] h-[18px]" />
-                <span className="text-[14px] hidden md:inline font-normal">{t.export}</span>
+                <Download className="w-4 h-4" />
+                <span className="hidden sm:inline">{t.export}</span>
                 <ChevronDown className={`w-3 h-3 opacity-50 transition-transform ${activeMenu === 'export' ? 'rotate-180' : ''}`} />
               </button>
 
                {activeMenu === 'export' && (
-                <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-40 animate-in fade-in zoom-in-95 duration-100 origin-top-right ring-1 ring-black/5">
+                <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-40 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
                     <div className="p-1.5">
                       <button
                         onClick={() => { setActiveMenu(null); onExportBackup(); }}
@@ -502,24 +491,26 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
                 </div>
               )}
             </div>
-          </div>
+            
+            {/* Hidden Inputs */}
+            <input type="file" ref={fileInputRef} className="hidden" accept=".txt,.epub,.pdf" multiple onChange={(e) => e.target.files && onImportFiles(Array.from(e.target.files))} />
+            <input type="file" ref={folderInputRef} className="hidden" 
+              // @ts-ignore
+              webkitdirectory="" directory="" multiple onChange={handleFolderInputChange} 
+            />
+            <input type="file" ref={backupInputRef} className="hidden" accept=".json" onChange={(e) => e.target.files?.[0] && onRestoreBackup(e.target.files[0])} />
 
-          <input type="file" ref={fileInputRef} className="hidden" accept=".txt,.epub,.pdf" multiple onChange={(e) => e.target.files && onImportFiles(Array.from(e.target.files))} />
-          <input type="file" ref={folderInputRef} className="hidden" 
-            // @ts-ignore
-            webkitdirectory="" directory="" multiple onChange={handleFolderInputChange} 
-          />
-          <input type="file" ref={backupInputRef} className="hidden" accept=".json" onChange={(e) => e.target.files?.[0] && onRestoreBackup(e.target.files[0])} />
+          </div>
         </div>
 
         {/* Tabs (Segmented Control Style) */}
-        <div className="flex items-center gap-8 border-b border-gray-200/60 mb-8 pointer-events-none">
+        <div className="flex items-center gap-8 border-b border-gray-200/60 mb-8 pointer-events-none overflow-x-auto no-scrollbar">
           {TABS_KEYS.map((key) => (
             <button
               key={key}
               onClick={() => setActiveTabKey(key)}
               className={`
-                pb-3 text-sm transition-all relative pointer-events-auto
+                pb-3 text-sm transition-all relative pointer-events-auto whitespace-nowrap
                 ${activeTabKey === key 
                   ? 'text-gray-900 font-medium after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-gray-900 after:rounded-t-full' 
                   : 'text-gray-500 font-normal hover:text-gray-700'
@@ -611,9 +602,6 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
                      <p className="text-[11px] text-gray-400 font-medium">
                        {percentage === 0 ? t.not_started : `${percentage}%`}
                      </p>
-                     {book.lastReadAt > 0 && percentage > 0 && (
-                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50"></div>
-                     )}
                   </div>
                 </div>
               </div>
@@ -644,13 +632,23 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
 
         {/* Empty State Hint */}
         {books.length === 0 && (
-           <div className="mt-8 ml-1">
+           <div className="mt-12 text-center">
               <p className="text-gray-400 text-sm font-light">{t.empty_hint}</p>
            </div>
         )}
 
         {sortedBooks.length === 0 && books.length > 0 && searchQuery && (
            <div className="text-center mt-20 text-gray-400 text-sm">{t.no_results}</div>
+        )}
+
+        {/* Footer Count */}
+        {books.length > 0 && (
+           <div className="mt-24 mb-12 flex justify-center opacity-40 hover:opacity-100 transition-opacity duration-500">
+               <div className="flex items-center gap-2 text-xs font-medium text-gray-400">
+                   <Library className="w-3 h-3" />
+                   <span>{t.total_books.replace('{count}', books.length.toString())}</span>
+               </div>
+           </div>
         )}
       </div>
     </div>
