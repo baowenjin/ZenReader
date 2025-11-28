@@ -1,7 +1,6 @@
 
-
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { Settings, ArrowLeft, ArrowRight, List, Target, Sparkles, X, ChevronLeft, ChevronRight, Loader2, Languages, Copy, StickyNote, Scan, Scaling, Minus, Plus, Maximize, Columns, File, Scroll, Cloud, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Settings, ArrowLeft, ArrowRight, List, Target, Sparkles, X, ChevronLeft, ChevronRight, Loader2, Languages, Copy, StickyNote, Scan, Scaling, Minus, Plus, Maximize, Columns, File, Scroll, Cloud, CheckCircle2, AlertCircle, Clock, BookOpenCheck } from 'lucide-react';
 import { BookData, ReaderSettings, AIEntityData, PdfViewMode, PdfFitMode } from '../types';
 import { THEMES } from '../constants';
 import { calculateProgress, ensurePdfLibraryLoaded } from '../utils';
@@ -20,6 +19,7 @@ interface ContextMenuState {
   left: number;
   top: number;
   text: string;
+  context: string; // Surrounding paragraph for better AI inference
   selectionRect: DOMRect;
 }
 
@@ -61,7 +61,7 @@ const DefinitionPopover = ({
   return (
     <div 
       className={`
-        absolute z-[100] flex flex-col w-[300px] rounded-xl border backdrop-blur-md
+        absolute z-[100] flex flex-col w-[320px] max-w-[90vw] rounded-xl border backdrop-blur-md
         transition-all duration-300 ease-out
         animate-in fade-in zoom-in-95
         ${containerClasses}
@@ -81,7 +81,7 @@ const DefinitionPopover = ({
         {/* Header: Term + Actions */}
         <div className="flex justify-between items-start gap-3">
            <div className="flex items-center gap-2 overflow-hidden">
-             <div className={`p-1 rounded-md ${isDark ? 'bg-white/10' : 'bg-black/5'}`}>
+             <div className={`p-1 rounded-md flex-shrink-0 ${isDark ? 'bg-white/10' : 'bg-black/5'}`}>
                <Sparkles className="w-3 h-3 text-amber-500" />
              </div>
              <span className="font-serif font-bold text-sm truncate opacity-90 select-none">
@@ -89,7 +89,7 @@ const DefinitionPopover = ({
              </span>
            </div>
 
-           <div className="flex items-center gap-1">
+           <div className="flex items-center gap-1 flex-shrink-0">
               {!isLoading && (
                 <button 
                   onClick={() => navigator.clipboard.writeText(data.definition)}
@@ -109,11 +109,11 @@ const DefinitionPopover = ({
         </div>
 
         {/* Body */}
-        <div className={`text-[13px] leading-relaxed opacity-90 font-sans`}>
+        <div className={`text-[13px] leading-relaxed opacity-90 font-sans whitespace-pre-wrap`}>
             {isLoading ? (
               <div className="flex items-center gap-2 py-2">
                 <Loader2 className="w-4 h-4 animate-spin text-blue-500/80" />
-                <span className={`text-xs ${subTextClasses} animate-pulse`}>Thinking...</span>
+                <span className={`text-xs ${subTextClasses} animate-pulse`}>Analyzing context...</span>
               </div>
             ) : (
               <div className="animate-in fade-in duration-300">
@@ -127,7 +127,7 @@ const DefinitionPopover = ({
 };
 
 // --- PDF Renderer ---
-
+// (PDF Renderer Code omitted for brevity as it is unchanged)
 const PdfPage = ({ 
   pdf, 
   pageNum, 
@@ -290,7 +290,7 @@ const PdfRenderer = ({
         }, 150);
         return () => clearTimeout(timer);
     }
-  }, [pdf, mode, initialScrollDone]); // Intentionally not depending on pageIndex to avoid jumping on updates
+  }, [pdf, mode, initialScrollDone]); 
 
   // 2. Scroll Spy for Progress Tracking
   useEffect(() => {
@@ -340,7 +340,6 @@ const PdfRenderer = ({
                   scale={scale} 
                   theme={theme}
                   isScrollMode={true}
-                  // We remove onVisible here because the global scroll spy handles it better for continuous mode
                 />
                 <div className="text-center text-[10px] text-gray-400 mt-2">{i + 1}</div>
              </div>
@@ -409,25 +408,19 @@ const Paragraph = React.memo(({
 
   // Focus Mode Styles
   let containerClass = "relative transition-all duration-500 ease-in-out px-4 md:px-0 mb-6";
-  
-  // Removing 'leading-relaxed' to allow inheritance from parent style
   let textClass = "transition-all duration-500";
   
   if (isHeading) {
-     // Headings keep specific size
      textClass += " font-bold text-2xl mt-12 mb-6 opacity-90";
-     containerClass += " mb-2"; // Reduce margin after heading container slightly
-  } else {
-     // Removing 'text-lg' to allow inheritance of fontSize from parent style
-     // textClass += " text-lg";
-  }
+     containerClass += " mb-2"; 
+  } 
 
   if (settings.focusMode) {
     if (isActive) {
-      containerClass += " opacity-100 scale-[1.01] my-10"; // Highlight
+      containerClass += " opacity-100 scale-[1.01] my-10"; 
       textClass += isHeading ? "" : " font-medium";
     } else {
-      containerClass += " opacity-1 blur-[1.5px] grayscale my-10"; // Dim others
+      containerClass += " opacity-1 blur-[1.5px] grayscale my-10"; 
     }
   }
 
@@ -481,6 +474,16 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   const [activeParagraphIndex, setActiveParagraphIndex] = useState<number | null>(null);
   const [showControls, setShowControls] = useState(true);
 
+  // Time state
+  const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    }, 1000 * 60);
+    return () => clearInterval(timer);
+  }, []);
+
   // PDF State
   const [pdfMeta, setPdfMeta] = useState<{ width: number, height: number } | null>(null);
   const [containerSize, setContainerSize] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -491,7 +494,6 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
   const themeStyles = THEMES[settings.theme];
   
-  // Determine progress metrics
   const isPdf = !!book.pdfArrayBuffer;
   const totalUnits = isPdf ? (book.pageCount || 1) : book.chapters.length;
   const progress = calculateProgress(book.currentPageIndex, totalUnits);
@@ -512,14 +514,14 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     if (!isPdf || !pdfMeta) return 1.0;
 
     if (settings.pdfFitMode === 'width') {
-        const padding = 32; // Horizontal padding
+        const padding = 32; 
         const availableWidth = containerSize.width - padding;
         const widthToFit = settings.pdfViewMode === 'double' ? availableWidth / 2 : availableWidth;
         return widthToFit / pdfMeta.width;
     } 
     
     if (settings.pdfFitMode === 'height') {
-        const padding = 120; // Vertical padding (toolbar + header)
+        const padding = 120; 
         const availableHeight = containerSize.height - padding;
         return availableHeight / pdfMeta.height;
     }
@@ -544,10 +546,26 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     const range = selection.getRangeAt(0);
     const rect = range.getBoundingClientRect();
 
+    // Context Capture
+    let context = "";
+    if (selection.anchorNode) {
+        // Attempt to find the closest block element text (the paragraph)
+        // If anchorNode is text, parent is the div. If anchorNode is the div, use it directly.
+        const node = selection.anchorNode.nodeType === Node.TEXT_NODE 
+            ? selection.anchorNode.parentElement 
+            : selection.anchorNode as HTMLElement;
+        
+        if (node && node.textContent) {
+            // Trim and limit context length to avoid overly massive prompts
+            context = node.textContent.trim().slice(0, 1500); 
+        }
+    }
+
     setContextMenu({
       left: e.clientX,
       top: e.clientY,
       text,
+      context,
       selectionRect: rect
     });
     
@@ -557,7 +575,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
   const handleAIAction = async (action: 'explain' | 'translate') => {
     if (!contextMenu) return;
-    const { text, selectionRect } = contextMenu;
+    const { text, context, selectionRect } = contextMenu;
     setContextMenu(null); // Close menu
 
     // 1. Calculate Absolute Position for Popover
@@ -617,16 +635,42 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
         const ai = new GoogleGenAI({ apiKey: apiKey });
         
         let prompt = "";
-        const langInstruction = settings.aiLanguage === 'zh' 
-            ? "Respond in Simplified Chinese." 
-            : settings.aiLanguage === 'en' 
-            ? "Respond in English." 
-            : "Respond in the user's language.";
+        let langInstruction = "";
+        
+        if (settings.aiLanguage === 'auto') {
+           // Auto-Detect Browser Language
+           const userLang = navigator.language; 
+           if (userLang.startsWith('zh')) {
+             langInstruction = "Respond in Simplified Chinese.";
+           } else {
+             // If not Chinese environment, we match the prompt text's language (AI does this by default usually)
+             // or specific instructions
+             langInstruction = "Respond in the same language as the selected text.";
+           }
+        } else if (settings.aiLanguage === 'zh') {
+            langInstruction = "Respond in Simplified Chinese.";
+        } else if (settings.aiLanguage === 'en') {
+            langInstruction = "Respond in English.";
+        }
 
         if (action === 'explain') {
-            prompt = `Define "${text}" briefly and concisely in under 60 words. Simple style. ${langInstruction}`;
+            prompt = `
+You are a knowledgeable reading companion.
+The user is reading a text.
+Paragraph Context: "...${context}..."
+Selected Text: "${text}"
+
+Task: Explain the meaning of the Selected Text within this specific Context.
+- If it is a slang, idiom, meme, or obscure cultural reference ("梗"), explain its origin and implied meaning clearly.
+- If it implies sarcasm or subtext, point it out.
+- Keep the explanation insightful but concise (under 120 words).
+${langInstruction}`;
         } else {
-            prompt = `Translate "${text}" concisely. ${langInstruction}`;
+            prompt = `
+Context: "${context}"
+Task: Translate the selected phrase "${text}" into the target language.
+Ensure the translation captures the tone and nuance of the original context.
+${langInstruction}`;
         }
 
         const response = await ai.models.generateContent({
@@ -644,7 +688,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
         console.error(e);
         setActiveEntity(prev => prev ? ({
             ...prev,
-            data: { ...prev.data, definition: "Error processing request." },
+            data: { ...prev.data, definition: "Error processing request. Check your API Key." },
             isLoading: false
         }) : null);
     }
@@ -652,7 +696,6 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
   // --- Standard Reader Logic ---
 
-  // Scroll to top when chapter changes (Unless PDF Scroll Mode)
   useEffect(() => {
     if (settings.pdfViewMode !== 'scroll') {
        window.scrollTo({ top: 0, behavior: 'auto' });
@@ -665,7 +708,6 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     }
   }, [book.currentPageIndex, settings.focusMode, isPdf, settings.pdfViewMode]);
 
-  // Auto-Hide Controls Logic
   const resetControlsTimer = useCallback(() => {
     if (controlsTimerRef.current) {
       clearTimeout(controlsTimerRef.current);
@@ -731,7 +773,6 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   useEffect(() => {
      if (settings.focusMode) return;
      const handleWheel = (e: WheelEvent) => {
-       // if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
        if (contextMenu) setContextMenu(null); 
        
        if (Math.abs(e.deltaY) > 20 && showControls && settings.autoHideControls) {
@@ -742,7 +783,6 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
      return () => window.removeEventListener('wheel', handleWheel);
   }, [settings.focusMode, showControls, settings.autoHideControls, contextMenu]);
 
-  // Helper for PDF Page navigation logic
   const navigatePdf = (direction: 'next' | 'prev') => {
       if (!isPdf) return;
       
@@ -750,14 +790,12 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
       let nextIndex = book.currentPageIndex;
 
       if (direction === 'next') {
-          // In Double mode, if cover (0), goto 1. If 1, goto 3.
           if (settings.pdfViewMode === 'double' && book.currentPageIndex === 0) {
               nextIndex = 1;
           } else {
               nextIndex += step;
           }
       } else {
-          // Prev
            if (settings.pdfViewMode === 'double' && book.currentPageIndex === 1) {
               nextIndex = 0;
            } else {
@@ -765,7 +803,6 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
            }
       }
 
-      // Bounds check
       if (nextIndex < 0) nextIndex = 0;
       if (nextIndex >= totalUnits) nextIndex = totalUnits - 1;
       
@@ -774,7 +811,6 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
       }
   };
 
-  // Keyboard
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
@@ -832,7 +868,6 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [book.currentPageIndex, totalUnits, isTOCOpen, activeEntity, settings.focusMode, activeParagraphIndex, scrollToParagraph, showControls, contextMenu, isPdf, settings.pdfViewMode]);
 
-  // Intersection Observer (Only for Text Mode)
   useEffect(() => {
     if (!settings.focusMode || !contentRef.current || isPdf) return;
     const options = { root: null, rootMargin: '-45% 0px -45% 0px', threshold: 0 };
@@ -860,8 +895,6 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   };
 
   const handlePdfPageVisible = useCallback((pageIdx: number) => {
-      // Logic for updating progress. The throttle logic is inside PdfRenderer,
-      // so we just call the prop function here.
       if (book.currentPageIndex !== pageIdx) {
           onPageChange(pageIdx);
       }
@@ -915,29 +948,34 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
       {/* TOP BAR */}
       <div 
         className={`
-          fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3
+          fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4
           transition-transform duration-300 ease-[cubic-bezier(0.2,0,0,1)]
-          bg-white/90 backdrop-blur-md border-b shadow-sm
-          ${themeStyles.text} ${themeStyles.border}
-          ${settings.theme === 'dark' ? 'bg-[#242424]/90' : settings.theme === 'sepia' ? 'bg-[#F2F0E9]/90' : 'bg-white/90'}
+          backdrop-blur-xl border-b shadow-sm
+          ${themeStyles.text} 
+          ${settings.theme === 'dark' ? 'bg-[#242424]/80 border-white/5' : settings.theme === 'sepia' ? 'bg-[#F2F0E9]/80 border-[#8C857B]/10' : 'bg-white/80 border-gray-100'}
           ${showControls ? 'translate-y-0' : '-translate-y-full'}
         `}
         onClick={handleUserInteraction}
       >
+         {/* Left: Back Button */}
          <button 
            onClick={onCloseBook}
            className={`p-2 rounded-full ${themeStyles.hover} transition-all group`}
            title="Back to Shelf"
          >
-           <ArrowLeft className="w-5 h-5" />
+           <ArrowLeft className="w-5 h-5 opacity-70 group-hover:opacity-100" />
          </button>
          
-         <div className="flex-1 text-center mx-4">
-            <h1 className="text-sm font-bold truncate max-w-md mx-auto">{currentChapter?.title || book.title}</h1>
+         {/* Center: Title */}
+         <div className="flex-1 text-center mx-6">
+            <h1 className="text-sm font-bold truncate max-w-lg mx-auto opacity-90 tracking-tight">
+               {currentChapter?.title || book.title}
+            </h1>
          </div>
 
-         <div className="flex items-center gap-4 text-xs font-mono font-medium opacity-60 w-auto min-w-[3rem] text-right justify-end">
-             {/* Sync Status Indicator */}
+         {/* Right: Status Info */}
+         <div className="flex items-center gap-3 sm:gap-4 text-xs font-medium opacity-80">
+             {/* Sync Status */}
              {syncStatus !== 'idle' && (
                <div className="flex items-center gap-1.5" title={syncStatus === 'syncing' ? 'Syncing...' : syncStatus === 'success' ? 'Saved' : 'Sync Error'}>
                  {syncStatus === 'syncing' && <Loader2 className="w-3 h-3 animate-spin text-blue-500" />}
@@ -946,26 +984,35 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                </div>
              )}
              
-             {/* Page Count */}
-             <div>
-               {isPdf && settings.pdfViewMode === 'scroll' 
-                  ? `${book.currentPageIndex + 1}/${totalUnits}` 
-                  : isPdf 
-                  ? `${book.currentPageIndex + 1}/${totalUnits}` 
-                  : `${progress}%`
-               }
+             {/* Time */}
+             <div className="hidden sm:flex items-center gap-1.5 font-mono" title="Current Time">
+                <Clock className="w-3.5 h-3.5 opacity-60" />
+                <span>{currentTime}</span>
+             </div>
+
+             {/* Progress */}
+             <div className="flex items-center gap-1.5 font-mono" title="Reading Progress">
+                <BookOpenCheck className="w-3.5 h-3.5 opacity-60" />
+                <span>
+                  {isPdf && settings.pdfViewMode === 'scroll' 
+                      ? `${book.currentPageIndex + 1}/${totalUnits}` 
+                      : isPdf 
+                      ? `${book.currentPageIndex + 1}/${totalUnits}` 
+                      : `${progress}%`
+                  }
+                </span>
              </div>
          </div>
       </div>
 
-      {/* BOTTOM BAR - PDF Enhancer or Standard */}
+      {/* BOTTOM BAR */}
       <div 
         className={`
           fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4
           transition-transform duration-300 ease-[cubic-bezier(0.2,0,0,1)]
-          bg-white/90 backdrop-blur-md border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]
-          ${themeStyles.text} ${themeStyles.border}
-          ${settings.theme === 'dark' ? 'bg-[#242424]/90' : settings.theme === 'sepia' ? 'bg-[#F2F0E9]/90' : 'bg-white/90'}
+          backdrop-blur-xl border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)]
+          ${themeStyles.text}
+          ${settings.theme === 'dark' ? 'bg-[#242424]/80 border-white/5' : settings.theme === 'sepia' ? 'bg-[#F2F0E9]/80 border-[#8C857B]/10' : 'bg-white/80 border-gray-100'}
           ${showControls ? 'translate-y-0' : 'translate-y-full'}
         `}
         onClick={handleUserInteraction}
@@ -983,9 +1030,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                  </button>
                </div>
 
-               {/* Central PDF Controls Group */}
                <div className={`flex items-center gap-4 bg-black/5 rounded-full px-4 py-1.5 ${settings.theme === 'dark' ? 'bg-white/5' : ''}`}>
-                   {/* View Modes */}
                    <div className="flex items-center gap-1 border-r border-gray-400/20 pr-4 mr-1">
                       {[
                         { mode: 'scroll', icon: Scroll, label: 'Scroll' },
@@ -1003,7 +1048,6 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                       ))}
                    </div>
                    
-                   {/* Zoom Controls */}
                    <div className="flex items-center gap-2">
                       <button 
                         onClick={() => onUpdateSettings({ pdfFitMode: 'width' })}
@@ -1116,7 +1160,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
           ref={contentRef}
           className={`w-full select-text transition-all duration-300 ease-in-out px-4`}
           style={{ 
-            maxWidth: isPdf ? undefined : settings.maxWidth, // PDF handles its own width
+            maxWidth: isPdf ? undefined : settings.maxWidth, 
             fontSize: settings.fontSize,
             lineHeight: settings.lineHeight,
             fontFamily: settings.fontFamily === 'elegant' 

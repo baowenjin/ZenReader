@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Bookshelf } from './components/Bookshelf';
 import { ReaderView } from './components/ReaderView';
@@ -19,6 +18,7 @@ const App: React.FC = () => {
 
   // Sync State
   const [syncHandle, setSyncHandle] = useState<any | null>(null);
+  const [syncFolderName, setSyncFolderName] = useState<string | null>(null);
   const [isSyncConnected, setIsSyncConnected] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
 
@@ -42,10 +42,9 @@ const App: React.FC = () => {
         const handle = await getDirectoryHandle();
         if (handle) {
           setSyncHandle(handle);
-          // We can't immediately verify permission without interaction on page load in some browsers,
-          // but we check if we "can" read.
-          // In standard File System Access API, we might need to ask user to "Reconnect".
-          // We will let the Bookshelf UI show a "Reconnect" state if handle exists but no permission.
+          setSyncFolderName(handle.name);
+          // We assume connected for UI, but actual reads need permission verification
+          // which happens on user interaction or first sync attempt.
         }
       } catch (e) {
         console.error("Failed to load database", e);
@@ -70,12 +69,20 @@ const App: React.FC = () => {
 
   // --- AUTOMATIC SYNC LOGIC (Debounced) ---
   useEffect(() => {
-    // Only run if we are connected and have a handle
+    // Only run if we are fully connected and have a handle
     if (!isSyncConnected || !syncHandle) return;
 
     const performSync = async () => {
       setSyncStatus('syncing');
       try {
+         // Verify permission silently first (usually cached by browser session)
+         // If permission is lost, this might fail, which is expected.
+         const hasPerm = await verifyPermission(syncHandle, true); 
+         if (!hasPerm) {
+             setSyncStatus('error'); // Permission lost in background
+             return;
+         }
+
          await syncStateToDisk(syncHandle, books, settings);
          setSyncStatus('success');
          // Clear success message after 3s
@@ -86,8 +93,8 @@ const App: React.FC = () => {
       }
     };
 
-    // Debounce 2 seconds
-    const timer = setTimeout(performSync, 2000);
+    // Debounce 1 second for snappier feeling while avoiding disk thrashing
+    const timer = setTimeout(performSync, 1000);
     return () => clearTimeout(timer);
 
   }, [books, settings, isSyncConnected, syncHandle]);
@@ -255,7 +262,7 @@ const App: React.FC = () => {
     await handleBooksImport([file]);
   };
 
-  const handleImportFolder = async () => {
+  const handleImportFolder = async (): Promise<boolean> => {
      // Legacy scan folder (read-only scan)
      try {
        // @ts-ignore
@@ -266,66 +273,67 @@ const App: React.FC = () => {
            const files = await scanDirectoryForFiles(dirHandle);
            setIsLoading(false);
            await handleBooksImport(files);
-       } 
+           return true; // Success
+       }
      } catch (err) {
-       console.error(err);
+        // If security error (iframe) or user cancelled, we return false to fallback
+        console.warn("Import folder failed (falling back to input):", err);
      } finally {
         setIsLoading(false);
      }
+     return false; // Fallback required
   };
 
-  // --- SYNC FOLDER LOGIC ---
+  // --- CORE SYNC LOGIC ---
 
-  const handleConnectSyncFolder = async () => {
+  const performConnectAndSync = async (dirHandle: any) => {
       try {
-          // @ts-ignore
-          const dirHandle = await window.showDirectoryPicker({
-              mode: 'readwrite',
-              id: 'zenreader-sync' // Remembers the directory for this ID
-          });
-
-          if (!dirHandle) return;
+          setIsLoading(true);
+          setSyncStatus('syncing');
 
           // 1. Verify Permission
           const granted = await verifyPermission(dirHandle, true);
           if (!granted) {
-              alert("Permission denied. Cannot sync.");
+              alert("Permission denied to access the sync folder. Please try again.");
+              setSyncStatus('error');
               return;
           }
 
-          setIsLoading(true);
-          setSyncStatus('syncing');
-          
-          // 2. Save Handle & Set Connected
+          // 2. Save Handle & Info
           setSyncHandle(dirHandle);
+          setSyncFolderName(dirHandle.name);
           await saveDirectoryHandle(dirHandle);
-
-          // 3. Read Sync File (if exists)
+          
+          // --- SYNC PHASE 1: READ REMOTE ---
+          
+          // A. Read Sync State JSON
           const remoteState = await readSyncFile(dirHandle);
           
-          // 4. Scan for Books in this folder
+          // B. Scan for Book Files in Folder
           const files = await scanDirectoryForFiles(dirHandle);
           
-          // 5. Import Books (Non-destructive)
+          // C. Import any new books found in the folder
           await handleBooksImport(files);
 
-          // 6. Merge State (Remote wins if newer, or basic merge)
+          // --- SYNC PHASE 2: MERGE STATE ---
           const currentAllBooks = await getAllBooks();
           let stateChanged = false;
 
           if (remoteState) {
-              // Sync Settings
+              // Merge Settings (Remote wins if valid, or we could do timestamp based if we tracked it)
+              // For simplicity: If remote has settings, apply them.
               if (remoteState.settings) {
                   setSettings(prev => ({ ...prev, ...remoteState.settings }));
                   stateChanged = true;
               }
 
-              // Sync Progress
+              // Merge Progress
               if (remoteState.progress) {
                   for (const book of currentAllBooks) {
                       const remoteProg = remoteState.progress[book.id];
                       if (remoteProg) {
-                          // If remote is more recent or just exists
+                          // Rule: If Remote is newer, take Remote.
+                          // If Local is newer, keep Local (it will overwrite remote in Phase 3)
                           if (remoteProg.lastReadAt > book.lastReadAt || book.currentPageIndex === 0) {
                               book.currentPageIndex = remoteProg.pageIndex;
                               book.lastReadAt = remoteProg.lastReadAt;
@@ -337,73 +345,76 @@ const App: React.FC = () => {
               }
           }
 
-          // 7. INITIAL WRITE: Force creation of zenreader_sync.json immediately
-          // This ensures the "data structure" is created as requested
-          await syncStateToDisk(dirHandle, currentAllBooks, settings);
-
+          // Update React State if merged
           if (stateChanged) {
              const reloaded = await getAllBooks();
              setBooks(reloaded);
+             
+             // --- SYNC PHASE 3: WRITE BACK (Merged State) ---
+             // We write the *freshly merged* state back to disk immediately
+             // so the cloud file is up to date with this device's latest changes too.
+             await syncStateToDisk(dirHandle, reloaded, remoteState?.settings ? { ...settings, ...remoteState.settings } : settings);
           } else {
+             // No changes from remote, but we should overwrite remote with our current state 
+             // to ensure it's initialized if it was empty.
+             await syncStateToDisk(dirHandle, currentAllBooks, settings);
              setBooks(currentAllBooks);
           }
           
-          // Now officially connected for auto-updates
+          // Done
           setIsSyncConnected(true);
           setSyncStatus('success');
-
-          alert("Sync Connected! Your library is now synced to this folder.");
+          alert("Sync Connected! Your library is now staying in sync with this folder.");
 
       } catch (err) {
-          if ((err as Error).name !== 'AbortError') {
-             console.error("Sync Connection Failed", err);
-             alert("Failed to connect sync folder.");
-             setSyncStatus('error');
-          } else {
-             setSyncStatus('idle');
-          }
+          console.error("Sync Logic Error", err);
+          alert("Failed to sync with the selected folder.");
+          setSyncStatus('error');
+          setIsSyncConnected(false);
       } finally {
           setIsLoading(false);
-          // Reset status to idle after a moment if success
           setTimeout(() => setSyncStatus(prev => prev === 'success' ? 'idle' : prev), 3000);
       }
   };
 
-  // Re-connect on load if handle exists
-  const handleReconnectSync = async () => {
-      if (!syncHandle) return;
+  const handleConnectSyncFolder = async () => {
+      // 0. Compatibility Check
+      if (!('showDirectoryPicker' in window)) {
+         alert("Your browser does not support the File System Access API required for Cloud Sync.\nPlease use Chrome, Edge, or Opera on Desktop.");
+         return;
+      }
+
       try {
-          const granted = await verifyPermission(syncHandle, true);
-          if (granted) {
-             setIsSyncConnected(true);
-             // Trigger a quick sync
-             const remoteState = await readSyncFile(syncHandle);
-             const files = await scanDirectoryForFiles(syncHandle);
-             await handleBooksImport(files);
-             
-             // Simple progress merge logic
-             const freshBooks = await getAllBooks();
-             if (remoteState && remoteState.progress) {
-                let updated = false;
-                for (const book of freshBooks) {
-                    const r = remoteState.progress[book.id];
-                    if (r && r.lastReadAt > book.lastReadAt) {
-                        book.currentPageIndex = r.pageIndex;
-                        book.lastReadAt = r.lastReadAt;
-                        await updateBookProgress(book.id, r.pageIndex);
-                        updated = true;
-                    }
-                }
-                if (updated) setBooks(await getAllBooks());
-             }
-             
-             alert("Sync Reconnected.");
+          // 1. Pick Folder
+          // @ts-ignore
+          const dirHandle = await window.showDirectoryPicker({
+              mode: 'readwrite',
+              id: 'zenreader-sync'
+          });
+
+          // 2. Execute Sync Logic
+          await performConnectAndSync(dirHandle);
+
+      } catch (err) {
+          // Handle specific errors
+          if ((err as Error).name === 'AbortError') return; // User cancelled
+          
+          if ((err as Error).name === 'SecurityError' || (err as any).code === 18) {
+              alert("Security Restriction: Sync cannot run in an iframe or cross-origin context. Please open the app in a full browser tab.");
           } else {
-             alert("Permission not granted.");
+              alert(`Connection Failed: ${(err as Error).message}`);
           }
-      } catch (e) {
-          console.error(e);
-          alert("Could not reconnect. Please select folder again.");
+          setSyncStatus('error');
+      }
+  };
+
+  const handleManualSync = async () => {
+      if (!syncHandle) {
+          // If no handle, treat as "Connect First Time"
+          await handleConnectSyncFolder();
+      } else {
+          // If handle exists, reuse it (will trigger permission prompt if needed)
+          await performConnectAndSync(syncHandle);
       }
   };
 
@@ -412,7 +423,7 @@ const App: React.FC = () => {
       setIsLoading(true);
       const allBooks = await getAllBooks();
       
-      // Create lightweight backup (Metadata Only) to avoid large file sizes.
+      // Create lightweight backup (Metadata Only)
       const backupData = allBooks.map(book => ({
         id: book.id,
         title: book.title,
@@ -627,9 +638,9 @@ const App: React.FC = () => {
           onOpenBook={handleOpenBook}
           onDeleteBooks={handleDeleteBooks}
           onConnectSync={handleConnectSyncFolder}
-          onReconnectSync={handleReconnectSync}
+          onManualSync={handleManualSync}
           isSyncConnected={isSyncConnected}
-          hasSyncHandle={!!syncHandle}
+          syncFolderName={syncFolderName}
         />
       ) : activeBook ? (
         <>

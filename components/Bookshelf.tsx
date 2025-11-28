@@ -1,5 +1,6 @@
+
 import React, { useRef, useState, useEffect } from 'react';
-import { Plus, Search, Trash2, FolderInput, Download, ChevronDown, FileText, FileUp, FileDown, Cloud, RefreshCw, Check } from 'lucide-react';
+import { Plus, Search, Trash2, FolderInput, Download, ChevronDown, FileText, FileUp, FileDown, Cloud, RefreshCw, Check, Settings2, Folder } from 'lucide-react';
 import { BookData } from '../types';
 import { calculateProgress } from '../utils';
 
@@ -8,14 +9,14 @@ interface BookshelfProps {
   onOpenBook: (book: BookData) => void;
   onImportBook: (file: File) => void;
   onImportFiles: (files: File[]) => void;
-  onImportFolder: () => void;
+  onImportFolder: () => Promise<boolean>;
   onExportBackup: () => void;
   onRestoreBackup: (file: File) => void;
   onDeleteBooks: (ids: string[], deleteLocal: boolean) => void;
   onConnectSync: () => void;
-  onReconnectSync: () => void;
+  onManualSync: () => void;
   isSyncConnected: boolean;
-  hasSyncHandle: boolean;
+  syncFolderName: string | null;
 }
 
 const TABS = ['默认', '更新', '进度', '书名', '字数'];
@@ -29,18 +30,20 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
   onRestoreBackup,
   onDeleteBooks,
   onConnectSync,
-  onReconnectSync,
+  onManualSync,
   isSyncConnected,
-  hasSyncHandle
+  syncFolderName
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
+  
+  const syncMenuRef = useRef<HTMLDivElement>(null);
   const importMenuRef = useRef<HTMLDivElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   
   // Selection State
-  const containerRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [initialSelection, setInitialSelection] = useState<Set<string>>(new Set());
   const [isSelecting, setIsSelecting] = useState(false);
@@ -54,13 +57,14 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
   const [activeTab, setActiveTab] = useState('默认');
   const [searchQuery, setSearchQuery] = useState('');
   const [isHoveringId, setIsHoveringId] = useState<string | null>(null);
-  const [activeMenu, setActiveMenu] = useState<'import' | 'export' | null>(null);
+  const [activeMenu, setActiveMenu] = useState<'import' | 'export' | 'sync' | null>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
         importMenuRef.current && !importMenuRef.current.contains(event.target as Node) &&
-        exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)
+        exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node) &&
+        syncMenuRef.current && !syncMenuRef.current.contains(event.target as Node)
       ) {
         setActiveMenu(null);
       }
@@ -109,10 +113,31 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
     if (e.target) e.target.value = '';
   };
 
+  // Improved Folder Scan Logic with Fallback
+  const handleScanFolderClick = async () => {
+    setActiveMenu(null);
+    let success = false;
+    
+    // Check if modern File System Access API is supported (better experience)
+    // @ts-ignore
+    if (window.showDirectoryPicker) {
+      // Try the modern API. If it fails (e.g. iframe), it returns false.
+      success = await onImportFolder();
+    } 
+
+    // If modern API is missing OR failed, use legacy fallback
+    if (!success) {
+      folderInputRef.current?.click();
+    }
+  };
+
   // --- MOUSE SELECTION LOGIC ---
   const handleMouseDown = (e: React.MouseEvent) => {
-    // Only start selection if clicking on the background (not a book or button)
-    if (e.target === containerRef.current || (e.target as HTMLElement).classList.contains('selection-zone')) {
+    // Start selection if clicking on the main wrapper or selection zone
+    const isWrapper = e.target === wrapperRef.current;
+    const isSelectionZone = (e.target as HTMLElement).classList?.contains('selection-zone');
+
+    if (isWrapper || isSelectionZone) {
       e.preventDefault();
       setIsSelecting(true);
       
@@ -130,7 +155,7 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handleMouseMove = (e: MouseEvent) => {
     if (!isSelecting || !selectionBox) return;
     
     setSelectionBox(prev => prev ? ({ ...prev, currentX: e.clientX, currentY: e.clientY }) : null);
@@ -173,14 +198,13 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
   useEffect(() => {
     if (isSelecting) {
       window.addEventListener('mouseup', handleMouseUp);
-      // Also add mousemove to window to catch fast movements outside container
-      window.addEventListener('mousemove', handleMouseMove as any);
+      window.addEventListener('mousemove', handleMouseMove);
     }
     return () => {
       window.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('mousemove', handleMouseMove as any);
+      window.removeEventListener('mousemove', handleMouseMove);
     };
-  }, [isSelecting, selectionBox, initialSelection]); // Add dependencies needed for handler
+  }, [isSelecting, selectionBox, initialSelection]); 
 
   const toggleSelection = (id: string, multi: boolean) => {
     const newSet = new Set(multi ? selectedIds : []);
@@ -213,42 +237,9 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
     setDeleteLocalFiles(false);
   };
 
-  // --- SYNC UI ---
-  let syncStatusUI;
-  if (isSyncConnected) {
-      syncStatusUI = (
-          <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
-             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-             <span>Synced</span>
-          </div>
-      );
-  } else if (hasSyncHandle) {
-      syncStatusUI = (
-          <button 
-             onClick={onReconnectSync}
-             className="flex items-center gap-1.5 text-xs font-medium text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-100 hover:bg-amber-100 transition-colors"
-          >
-             <RefreshCw className="w-3 h-3" />
-             <span>Reconnect</span>
-          </button>
-      );
-  } else {
-      // @ts-ignore
-      const showSyncButton = !!window.showDirectoryPicker;
-      if (showSyncButton) {
-          syncStatusUI = (
-            <button
-                onClick={onConnectSync}
-                className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors group"
-            >
-                <div className="p-1.5 rounded-md bg-gray-100 group-hover:bg-blue-50 transition-colors">
-                    <Cloud className="w-4 h-4" />
-                </div>
-                <span>Connect Sync Folder</span>
-            </button>
-          );
-      }
-  }
+  // Check browser support for Sync
+  // @ts-ignore
+  const showSyncButton = !!window.showDirectoryPicker;
 
   const selectionStyle: React.CSSProperties | undefined = selectionBox ? {
     position: 'fixed',
@@ -264,6 +255,7 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
 
   return (
     <div 
+      ref={wrapperRef}
       className="min-h-screen bg-[#f8f9fa] text-gray-900 pb-20 font-sans select-none"
       onMouseDown={handleMouseDown}
     >
@@ -333,21 +325,91 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 pt-10" ref={containerRef}>
+      <div className="max-w-7xl mx-auto px-6 pt-10">
         
         {/* Header Row */}
         <div className="flex items-end justify-between mb-4 pointer-events-none">
           <div className="flex items-center gap-4 pointer-events-auto">
               <h1 className="text-3xl font-bold text-gray-900 tracking-tight leading-none font-serif">书架</h1>
-              {syncStatusUI}
               {selectedIds.size > 0 && (
-                <div className="ml-4 text-sm font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full animate-in fade-in slide-in-from-left-4">
+                <div className="text-sm font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full animate-in fade-in slide-in-from-left-4">
                   {selectedIds.size} Selected
                 </div>
               )}
           </div>
           
           <div className="flex items-center gap-6 pointer-events-auto">
+            
+            {/* Sync Dropdown (New Position) */}
+            {showSyncButton && (
+              <div className="relative" ref={syncMenuRef}>
+                <button
+                  onClick={() => setActiveMenu(activeMenu === 'sync' ? null : 'sync')}
+                  className={`
+                    flex items-center gap-1.5 text-sm font-medium transition-colors
+                    ${activeMenu === 'sync' ? 'text-gray-900' : 'text-gray-500 hover:text-gray-900'}
+                    ${isSyncConnected ? 'text-blue-600' : ''}
+                  `}
+                >
+                  <Cloud className="w-4 h-4" />
+                  <span>同步</span>
+                  <ChevronDown className={`w-3 h-3 transition-transform ${activeMenu === 'sync' ? 'rotate-180' : ''}`} />
+                </button>
+
+                {activeMenu === 'sync' && (
+                  <div className="absolute top-full right-0 mt-2 w-72 bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden z-40 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
+                      {/* Status Header */}
+                      <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Status</div>
+                        <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${isSyncConnected ? 'bg-emerald-500' : 'bg-gray-300'}`}></div>
+                            <span className={`text-sm font-medium ${isSyncConnected ? 'text-emerald-700' : 'text-gray-600'}`}>
+                              {isSyncConnected ? '已连接 (Connected)' : '未连接 (Disconnected)'}
+                            </span>
+                        </div>
+                        {isSyncConnected && syncFolderName && (
+                           <div className="flex items-center gap-1 mt-1 text-xs text-gray-500 truncate" title={syncFolderName}>
+                              <Folder className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate">{syncFolderName}</span>
+                           </div>
+                        )}
+                      </div>
+
+                      {/* Menu Actions */}
+                      <div className="py-1">
+                          {isSyncConnected ? (
+                             <>
+                              <button
+                                onClick={() => { setActiveMenu(null); onManualSync(); }}
+                                className="w-full text-left px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 flex items-center gap-3 transition-colors"
+                              >
+                                <RefreshCw className="w-4 h-4" />
+                                <span>立即同步 (Sync Now)</span>
+                              </button>
+                              
+                              <button
+                                onClick={() => { setActiveMenu(null); onConnectSync(); }}
+                                className="w-full text-left px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 flex items-center gap-3 transition-colors"
+                              >
+                                <Settings2 className="w-4 h-4" />
+                                <span>修改同步文件夹 (Change Folder)</span>
+                              </button>
+                             </>
+                          ) : (
+                             <button
+                               onClick={() => { setActiveMenu(null); onConnectSync(); }}
+                               className="w-full text-left px-4 py-2.5 text-sm text-blue-600 hover:bg-blue-50 font-medium flex items-center gap-3 transition-colors"
+                             >
+                               <Cloud className="w-4 h-4" />
+                               <span>设置同步文件夹 (Connect Folder)</span>
+                             </button>
+                          )}
+                      </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Import Dropdown */}
             <div className="relative" ref={importMenuRef}>
               <button
@@ -372,7 +434,7 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
                       <span>添加文件</span>
                     </button>
                     <button
-                      onClick={() => { setActiveMenu(null); folderInputRef.current?.click(); }}
+                      onClick={handleScanFolderClick}
                       className="w-full text-left px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 flex items-center gap-3 transition-colors"
                     >
                       <FolderInput className="w-4 h-4" />
