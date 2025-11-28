@@ -408,7 +408,7 @@ const Paragraph = React.memo(({
 
   // Focus Mode Styles
   let containerClass = "relative transition-all duration-500 ease-in-out px-4 md:px-0 mb-6";
-  let textClass = "transition-all duration-500";
+  let textClass = "transition-all duration-500 block";
   
   if (isHeading) {
      textClass += " font-bold text-2xl mt-12 mb-6 opacity-90";
@@ -432,9 +432,9 @@ const Paragraph = React.memo(({
         textAlign: isHeading ? 'left' : settings.textAlign,
       }}
     >
-      <div className={textClass}>
+      <p className={textClass}>
         {cleanText}
-      </div>
+      </p>
     </div>
   );
 });
@@ -1168,7 +1168,7 @@ ${langInstruction}`;
            paddingBottom: settings.focusMode && !isPdf ? '45vh' : undefined
         }}
       >
-        <div 
+        <article 
           ref={contentRef}
           className={`w-full select-text transition-all duration-300 ease-in-out px-4`}
           style={{ 
@@ -1239,7 +1239,7 @@ ${langInstruction}`;
               )}
             </>
           )}
-        </div>
+        </article>
       </main>
 
       <TOC 
