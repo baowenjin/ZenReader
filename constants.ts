@@ -19,6 +19,7 @@ export const THEME_COLORS = {
 };
 
 export const DEFAULT_SETTINGS = {
+  language: 'auto' as const,
   theme: ThemeType.LIGHT,
   fontSize: 19,
   lineHeight: 1.8,

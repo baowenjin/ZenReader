@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Bookshelf } from './components/Bookshelf';
 import { ReaderView } from './components/ReaderView';
@@ -8,6 +9,7 @@ import { DEFAULT_SETTINGS, THEME_COLORS } from './constants';
 import { parseChapters, parseEpub, parsePdf, generateId, extractMetadata, scanDirectoryForFiles } from './utils';
 import { initDB, saveBook, getAllBooks, updateBookProgress, deleteBook, saveDirectoryHandle, getDirectoryHandle } from './db';
 import { verifyPermission, readSyncFile, writeSyncFile, SyncState } from './fsHelpers';
+import { Locale } from './locales';
 
 const App: React.FC = () => {
   // Application State
@@ -29,6 +31,16 @@ const App: React.FC = () => {
     return { ...DEFAULT_SETTINGS, ...parsed };
   });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Determine current locale
+  const getLocale = (): Locale => {
+    if (settings.language === 'auto') {
+      // Simple detection: if user agent string starts with zh, use zh. Else en.
+      return navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+    }
+    return settings.language as Locale;
+  };
+  const currentLocale = getLocale();
 
   // Initialize DB and load books
   useEffect(() => {
@@ -641,6 +653,7 @@ const App: React.FC = () => {
           onManualSync={handleManualSync}
           isSyncConnected={isSyncConnected}
           syncFolderName={syncFolderName}
+          language={currentLocale}
         />
       ) : activeBook ? (
         <>
@@ -653,6 +666,7 @@ const App: React.FC = () => {
             onToggleFocusMode={() => handleUpdateSettings({ focusMode: !settings.focusMode })}
             onUpdateSettings={handleUpdateSettings}
             syncStatus={syncStatus}
+            language={currentLocale}
           />
           <ControlPanel 
             isOpen={isSettingsOpen}
@@ -661,6 +675,7 @@ const App: React.FC = () => {
             onUpdateSettings={handleUpdateSettings}
             currentTheme={settings.theme}
             isPdf={!!activeBook.pdfArrayBuffer}
+            language={currentLocale}
           />
         </>
       ) : null}

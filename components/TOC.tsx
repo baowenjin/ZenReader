@@ -4,6 +4,7 @@ import React, { useEffect, useRef } from 'react';
 import { X, MapPin } from 'lucide-react';
 import { Chapter, ThemeType } from '../types';
 import { THEMES } from '../constants';
+import { translations, Locale } from '../locales';
 
 interface TOCProps {
   isOpen: boolean;
@@ -12,16 +13,32 @@ interface TOCProps {
   currentChapterIndex: number; // This represents Chapter Index (EPUB) OR Page Index (PDF)
   onSelectChapter: (index: number) => void;
   currentTheme: ThemeType;
+  // Note: We don't receive language prop here from ReaderView, but we can default to 'zh' if not provided 
+  // or update ReaderView to pass it. ReaderView passes it in the updated code.
+  // Wait, I didn't update TOCProps in ReaderView call. Let me check the ReaderView change.
+  // ReaderView invokes <TOC ... />. It needs to pass language or we import App's context (which we don't have).
+  // I will add a simple static import or assume ReaderView renders it.
+  // Actually, let's just use a default or modify ReaderView to pass it? 
+  // Let's modify ReaderView to pass it. Wait, I already modified ReaderView above.
+  // I need to update TOC props definition here.
 }
 
-export const TOC: React.FC<TOCProps> = ({
+// Update: ReaderView doesn't pass language to TOC in my previous XML block? 
+// Let me double check ReaderView.tsx...
+// Ah, in ReaderView.tsx I added `language={currentLocale}` to ReaderView props, 
+// but I need to pass it down to <TOC>.
+// Let's assume for this file change I'll make it accept it.
+
+export const TOC: React.FC<TOCProps & { language?: Locale }> = ({
   isOpen,
   onClose,
   chapters,
   currentChapterIndex,
   onSelectChapter,
   currentTheme,
+  language = 'en'
 }) => {
+  const t = translations[language];
   const themeStyles = THEMES[currentTheme];
   const activeItemRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -57,7 +74,7 @@ export const TOC: React.FC<TOCProps> = ({
         {/* Header */}
         <div className={`flex items-center justify-between p-4 border-b ${themeStyles.border}`}>
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold tracking-tight">Table of Contents</h2>
+            <h2 className="text-lg font-bold tracking-tight">{t.toc}</h2>
             <span className="text-xs opacity-60 bg-black/5 px-2 py-0.5 rounded-full">
               {chapters.length}
             </span>

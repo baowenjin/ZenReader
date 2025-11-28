@@ -1,4 +1,5 @@
 
+
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Settings, ArrowLeft, ArrowRight, List, Target, Sparkles, X, ChevronLeft, ChevronRight, Loader2, Languages, Copy, StickyNote, Scan, Scaling, Minus, Plus, Maximize, Columns, File, Scroll, Cloud, CheckCircle2, AlertCircle, Clock, BookOpenCheck } from 'lucide-react';
 import { BookData, ReaderSettings, AIEntityData, PdfViewMode, PdfFitMode } from '../types';
@@ -6,6 +7,7 @@ import { THEMES } from '../constants';
 import { calculateProgress, ensurePdfLibraryLoaded } from '../utils';
 import { TOC } from './TOC';
 import { GoogleGenAI } from "@google/genai";
+import { translations, Locale } from '../locales';
 
 // --- Types ---
 interface Position {
@@ -452,6 +454,7 @@ interface ReaderViewProps {
   onToggleFocusMode: () => void;
   onUpdateSettings: (newSettings: Partial<ReaderSettings>) => void;
   syncStatus?: 'idle' | 'syncing' | 'success' | 'error';
+  language: Locale;
 }
 
 export const ReaderView: React.FC<ReaderViewProps> = ({
@@ -462,8 +465,10 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   onCloseBook,
   onToggleFocusMode,
   onUpdateSettings,
-  syncStatus = 'idle'
+  syncStatus = 'idle',
+  language
 }) => {
+  const t = translations[language];
   const contentRef = useRef<HTMLDivElement>(null);
   const isAutoScrolling = useRef(false);
   const scrollTimeoutRef = useRef<number | null>(null);
@@ -961,7 +966,7 @@ ${langInstruction}`;
          <button 
            onClick={onCloseBook}
            className={`p-2 rounded-full ${themeStyles.hover} transition-all group`}
-           title="Back to Shelf"
+           title={t.back_to_shelf}
          >
            <ArrowLeft className="w-5 h-5 opacity-70 group-hover:opacity-100" />
          </button>
@@ -1024,7 +1029,7 @@ ${langInstruction}`;
                  <button
                    onClick={() => setIsTOCOpen(true)}
                    className={`p-2.5 rounded-full ${themeStyles.hover} transition-colors`}
-                   title="Chapters"
+                   title={t.toc}
                  >
                    <List className="w-5 h-5" />
                  </button>
@@ -1033,9 +1038,9 @@ ${langInstruction}`;
                <div className={`flex items-center gap-4 bg-black/5 rounded-full px-4 py-1.5 ${settings.theme === 'dark' ? 'bg-white/5' : ''}`}>
                    <div className="flex items-center gap-1 border-r border-gray-400/20 pr-4 mr-1">
                       {[
-                        { mode: 'scroll', icon: Scroll, label: 'Scroll' },
-                        { mode: 'single', icon: File, label: 'Single' },
-                        { mode: 'double', icon: Columns, label: 'Spread' },
+                        { mode: 'scroll', icon: Scroll, label: t.pdf_scroll },
+                        { mode: 'single', icon: File, label: t.pdf_single },
+                        { mode: 'double', icon: Columns, label: t.pdf_spread },
                       ].map(m => (
                           <button
                             key={m.mode}
@@ -1089,7 +1094,7 @@ ${langInstruction}`;
                <button 
                  onClick={onOpenSettings}
                  className={`p-2.5 rounded-full ${themeStyles.hover} transition-colors`}
-                 title="Settings"
+                 title={t.settings_title}
                >
                  <Settings className="w-5 h-5" />
                </button>
@@ -1101,6 +1106,7 @@ ${langInstruction}`;
               onClick={() => book.currentPageIndex > 0 && onPageChange(book.currentPageIndex - 1)}
               disabled={book.currentPageIndex === 0}
               className={`p-3 rounded-full ${themeStyles.hover} disabled:opacity-30 transition-colors`}
+              title={t.prev_chapter}
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
@@ -1109,7 +1115,7 @@ ${langInstruction}`;
               <button
                 onClick={() => setIsTOCOpen(true)}
                 className={`p-3 rounded-full ${themeStyles.hover} transition-colors disabled:opacity-30`}
-                title="Table of Contents"
+                title={t.toc}
               >
                 <List className="w-5 h-5" />
               </button>
@@ -1117,7 +1123,7 @@ ${langInstruction}`;
               <button 
                 onClick={onToggleFocusMode}
                 className={`p-3 rounded-full transition-colors ${settings.focusMode ? 'bg-blue-100 text-blue-600' : themeStyles.hover} disabled:opacity-30`}
-                title="Focus Mode"
+                title={t.focus_mode}
               >
                   <Target className="w-5 h-5" />
               </button>
@@ -1125,7 +1131,7 @@ ${langInstruction}`;
               <button 
                 onClick={onOpenSettings}
                 className={`p-3 rounded-full ${themeStyles.hover} transition-colors`}
-                title="Settings"
+                title={t.settings_title}
               >
                 <Settings className="w-5 h-5" />
               </button>
@@ -1135,6 +1141,7 @@ ${langInstruction}`;
               onClick={() => book.currentPageIndex < totalUnits - 1 && onPageChange(book.currentPageIndex + 1)}
               disabled={book.currentPageIndex === totalUnits - 1}
               className={`p-3 rounded-full ${themeStyles.hover} disabled:opacity-30 transition-colors`}
+              title={t.next_chapter}
             >
               <ChevronRight className="w-5 h-5" />
             </button>
@@ -1209,7 +1216,7 @@ ${langInstruction}`;
                     `}
                   >
                     <ChevronLeft className="w-4 h-4" />
-                    <span>Previous</span>
+                    <span>{t.prev_chapter}</span>
                   </button>
                   
                   <button 
@@ -1220,7 +1227,7 @@ ${langInstruction}`;
                       bg-black/5 hover:bg-black/10 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-black/5
                     `}
                   >
-                    <span>Next Chapter</span>
+                    <span>{t.next_chapter}</span>
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -1237,6 +1244,7 @@ ${langInstruction}`;
         currentChapterIndex={book.currentPageIndex}
         onSelectChapter={onPageChange}
         currentTheme={settings.theme}
+        language={language}
       />
     </div>
   );

@@ -1,8 +1,10 @@
 
+
 import React, { useRef, useState, useEffect } from 'react';
-import { Plus, Search, Trash2, FolderInput, Download, ChevronDown, FileText, FileUp, FileDown, Cloud, RefreshCw, Check, Settings2, Folder } from 'lucide-react';
+import { Plus, Search, Trash2, FolderInput, Download, ChevronDown, FileText, FileUp, FileDown, Cloud, RefreshCw, Check, Settings2, Folder, Library } from 'lucide-react';
 import { BookData } from '../types';
 import { calculateProgress } from '../utils';
+import { translations, Locale } from '../locales';
 
 interface BookshelfProps {
   books: BookData[];
@@ -17,9 +19,10 @@ interface BookshelfProps {
   onManualSync: () => void;
   isSyncConnected: boolean;
   syncFolderName: string | null;
+  language: Locale;
 }
 
-const TABS = ['默认', '更新', '进度', '书名', '字数'];
+const TABS_KEYS = ['tab_default', 'tab_recent', 'tab_progress', 'tab_title', 'tab_length'] as const;
 
 export const Bookshelf: React.FC<BookshelfProps> = ({ 
   books, 
@@ -32,8 +35,10 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
   onConnectSync,
   onManualSync,
   isSyncConnected,
-  syncFolderName
+  syncFolderName,
+  language
 }) => {
+  const t = translations[language];
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
@@ -54,7 +59,7 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
   const [deleteLocalFiles, setDeleteLocalFiles] = useState(false);
   const [idsToDelete, setIdsToDelete] = useState<string[]>([]);
   
-  const [activeTab, setActiveTab] = useState('默认');
+  const [activeTabKey, setActiveTabKey] = useState<typeof TABS_KEYS[number]>('tab_default');
   const [searchQuery, setSearchQuery] = useState('');
   const [isHoveringId, setIsHoveringId] = useState<string | null>(null);
   const [activeMenu, setActiveMenu] = useState<'import' | 'export' | 'sync' | null>(null);
@@ -78,18 +83,18 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
   );
 
   const sortedBooks = [...filteredBooks].sort((a, b) => {
-    if (activeTab === '进度') {
+    if (activeTabKey === 'tab_progress') {
       const progA = calculateProgress(a.currentPageIndex, a.chapters?.length || 1);
       const progB = calculateProgress(b.currentPageIndex, b.chapters?.length || 1);
       return progB - progA;
     }
-    if (activeTab === '更新') {
+    if (activeTabKey === 'tab_recent') {
       return b.lastReadAt - a.lastReadAt;
     }
-    if (activeTab === '书名') {
-      return a.title.localeCompare(b.title, 'zh-CN');
+    if (activeTabKey === 'tab_title') {
+      return a.title.localeCompare(b.title, language === 'zh' ? 'zh-CN' : 'en');
     }
-    if (activeTab === '字数') {
+    if (activeTabKey === 'tab_length') {
       return b.content.length - a.content.length;
     }
     return b.createdAt - a.createdAt;
@@ -247,8 +252,8 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
     top: Math.min(selectionBox.startY, selectionBox.currentY),
     width: Math.abs(selectionBox.currentX - selectionBox.startX),
     height: Math.abs(selectionBox.currentY - selectionBox.startY),
-    backgroundColor: 'rgba(59, 130, 246, 0.2)',
-    border: '1px solid rgba(59, 130, 246, 0.8)',
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    border: '1px solid rgba(59, 130, 246, 0.5)',
     pointerEvents: 'none',
     zIndex: 9999
   } : undefined;
@@ -256,7 +261,7 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
   return (
     <div 
       ref={wrapperRef}
-      className="min-h-screen bg-[#f8f9fa] text-gray-900 pb-20 font-sans select-none"
+      className="min-h-screen bg-[#FBFBFD] text-gray-900 pb-20 font-sans select-none"
       onMouseDown={handleMouseDown}
     >
       {/* Selection Box Visual */}
@@ -267,15 +272,14 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowDeleteModal(false)} />
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 relative z-10 animate-in fade-in zoom-in-95 duration-200">
-               <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Books?</h3>
+               <h3 className="text-lg font-bold text-gray-900 mb-2">{t.delete_confirm_title}</h3>
                <p className="text-gray-600 text-sm mb-6">
-                 Are you sure you want to delete <span className="font-bold text-gray-900">{idsToDelete.length}</span> book{idsToDelete.length > 1 ? 's' : ''}?
-                 This action cannot be undone.
+                 {t.delete_confirm_msg} <span className="font-bold text-gray-900">{idsToDelete.length}</span> {t.delete_confirm_suffix}
                </p>
                
                {isSyncConnected && (
                  <label className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 bg-gray-50 mb-6 cursor-pointer hover:bg-gray-100 transition-colors">
-                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${deleteLocalFiles ? 'bg-blue-500 border-blue-500' : 'bg-white border-gray-300'}`}>
+                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${deleteLocalFiles ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'}`}>
                       {deleteLocalFiles && <Check className="w-3.5 h-3.5 text-white" />}
                     </div>
                     <input 
@@ -285,8 +289,8 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
                       onChange={(e) => setDeleteLocalFiles(e.target.checked)} 
                     />
                     <div className="flex-1">
-                      <div className="text-sm font-medium text-gray-900">Delete local files</div>
-                      <div className="text-xs text-gray-500">Remove from sync folder</div>
+                      <div className="text-sm font-medium text-gray-900">{t.delete_local}</div>
+                      <div className="text-xs text-gray-500">{t.delete_local_hint}</div>
                     </div>
                  </label>
                )}
@@ -296,112 +300,128 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
                    onClick={() => setShowDeleteModal(false)}
                    className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
                  >
-                   Cancel
+                   {t.cancel}
                  </button>
                  <button 
                    onClick={confirmDelete}
                    className="flex-1 px-4 py-2 rounded-lg bg-red-500 text-white font-medium hover:bg-red-600 transition-colors shadow-sm shadow-red-200"
                  >
-                   Delete
+                   {t.delete}
                  </button>
                </div>
             </div>
          </div>
       )}
       
-      {/* Top Search Bar */}
-      <div className="bg-white/80 backdrop-blur-md px-6 py-3 sticky top-0 z-30 border-b border-gray-100">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex-1 bg-gray-100/50 hover:bg-gray-100 transition-colors rounded-lg h-9 flex items-center px-3 gap-2 text-gray-400 focus-within:text-gray-800 focus-within:bg-white focus-within:ring-1 focus-within:ring-gray-200">
-            <Search className="w-4 h-4" />
-            <input 
-              type="text"
-              placeholder="Type to search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-transparent border-none outline-none text-sm w-full placeholder-gray-400 text-gray-800"
-            />
+      {/* Top Search Bar & Header Area */}
+      <div className="bg-white/80 backdrop-blur-xl sticky top-0 z-30 border-b border-gray-200/60 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-3">
+          <div className="flex items-center justify-between gap-4">
+             {/* Logo / Title Area */}
+             <div className="flex items-center gap-3">
+               <div className="w-8 h-8 bg-gray-900 text-white rounded-lg flex items-center justify-center">
+                  <Library className="w-5 h-5" />
+               </div>
+               <span className="font-serif font-bold text-lg tracking-tight hidden sm:block">ZenReader</span>
+             </div>
+
+             {/* Centered Search */}
+             <div className="flex-1 max-w-md mx-auto">
+                <div className="bg-gray-100/80 hover:bg-gray-100 transition-colors rounded-lg h-9 flex items-center px-3 gap-2 text-gray-400 focus-within:text-gray-800 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:shadow-sm transition-all duration-200">
+                  <Search className="w-4 h-4" />
+                  <input 
+                    type="text"
+                    placeholder={t.search_placeholder}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="bg-transparent border-none outline-none text-sm w-full placeholder-gray-400 text-gray-800"
+                  />
+                </div>
+             </div>
+
+             {/* Right Spacer (to balance logo) */}
+             <div className="w-8 hidden sm:block"></div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 pt-10">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 pt-8 md:pt-12">
         
-        {/* Header Row */}
-        <div className="flex items-end justify-between mb-4 pointer-events-none">
+        {/* Main Header Row */}
+        <div className="flex items-end justify-between mb-8 pointer-events-none">
           <div className="flex items-center gap-4 pointer-events-auto">
-              <h1 className="text-3xl font-bold text-gray-900 tracking-tight leading-none font-serif">书架</h1>
+              <h1 className="text-[28px] font-semibold text-gray-900 tracking-tight leading-none">{t.bookshelf_title}</h1>
               {selectedIds.size > 0 && (
-                <div className="text-sm font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full animate-in fade-in slide-in-from-left-4">
-                  {selectedIds.size} Selected
+                <div className="text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full animate-in fade-in slide-in-from-left-2">
+                  {selectedIds.size} {t.selected}
                 </div>
               )}
           </div>
           
-          <div className="flex items-center gap-6 pointer-events-auto">
+          <div className="flex items-center gap-3 md:gap-4 pointer-events-auto">
             
-            {/* Sync Dropdown (New Position) */}
+            {/* Sync Dropdown */}
             {showSyncButton && (
               <div className="relative" ref={syncMenuRef}>
                 <button
                   onClick={() => setActiveMenu(activeMenu === 'sync' ? null : 'sync')}
                   className={`
-                    flex items-center gap-1.5 text-sm font-medium transition-colors
-                    ${activeMenu === 'sync' ? 'text-gray-900' : 'text-gray-500 hover:text-gray-900'}
+                    flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors
+                    ${activeMenu === 'sync' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}
                     ${isSyncConnected ? 'text-blue-600' : ''}
                   `}
                 >
-                  <Cloud className="w-4 h-4" />
-                  <span>同步</span>
-                  <ChevronDown className={`w-3 h-3 transition-transform ${activeMenu === 'sync' ? 'rotate-180' : ''}`} />
+                  <Cloud className="w-[18px] h-[18px]" />
+                  <span className="text-[14px] hidden md:inline font-normal">{t.sync}</span>
+                  <ChevronDown className={`w-3 h-3 opacity-50 transition-transform ${activeMenu === 'sync' ? 'rotate-180' : ''}`} />
                 </button>
 
                 {activeMenu === 'sync' && (
-                  <div className="absolute top-full right-0 mt-2 w-72 bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden z-40 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
+                  <div className="absolute top-full right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-40 animate-in fade-in zoom-in-95 duration-100 origin-top-right ring-1 ring-black/5">
                       {/* Status Header */}
-                      <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Status</div>
+                      <div className="px-4 py-3 bg-gray-50/50 border-b border-gray-100">
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">{t.sync_status}</div>
                         <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${isSyncConnected ? 'bg-emerald-500' : 'bg-gray-300'}`}></div>
+                            <div className={`w-2 h-2 rounded-full ${isSyncConnected ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-gray-300'}`}></div>
                             <span className={`text-sm font-medium ${isSyncConnected ? 'text-emerald-700' : 'text-gray-600'}`}>
-                              {isSyncConnected ? '已连接 (Connected)' : '未连接 (Disconnected)'}
+                              {isSyncConnected ? t.connected : t.disconnected}
                             </span>
                         </div>
                         {isSyncConnected && syncFolderName && (
-                           <div className="flex items-center gap-1 mt-1 text-xs text-gray-500 truncate" title={syncFolderName}>
-                              <Folder className="w-3 h-3 flex-shrink-0" />
-                              <span className="truncate">{syncFolderName}</span>
+                           <div className="flex items-center gap-1.5 mt-2 text-xs text-gray-500 truncate bg-white border border-gray-200 rounded px-2 py-1" title={syncFolderName}>
+                              <Folder className="w-3 h-3 flex-shrink-0 text-blue-500" />
+                              <span className="truncate font-mono">{syncFolderName}</span>
                            </div>
                         )}
                       </div>
 
                       {/* Menu Actions */}
-                      <div className="py-1">
+                      <div className="p-1.5 space-y-0.5">
                           {isSyncConnected ? (
                              <>
                               <button
                                 onClick={() => { setActiveMenu(null); onManualSync(); }}
-                                className="w-full text-left px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 flex items-center gap-3 transition-colors"
+                                className="w-full text-left px-3 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-3 transition-colors"
                               >
-                                <RefreshCw className="w-4 h-4" />
-                                <span>立即同步 (Sync Now)</span>
+                                <RefreshCw className="w-4 h-4 opacity-70" />
+                                <span>{t.sync_now}</span>
                               </button>
                               
                               <button
                                 onClick={() => { setActiveMenu(null); onConnectSync(); }}
-                                className="w-full text-left px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 flex items-center gap-3 transition-colors"
+                                className="w-full text-left px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-lg flex items-center gap-3 transition-colors"
                               >
-                                <Settings2 className="w-4 h-4" />
-                                <span>修改同步文件夹 (Change Folder)</span>
+                                <Settings2 className="w-4 h-4 opacity-70" />
+                                <span>{t.change_folder}</span>
                               </button>
                              </>
                           ) : (
                              <button
                                onClick={() => { setActiveMenu(null); onConnectSync(); }}
-                               className="w-full text-left px-4 py-2.5 text-sm text-blue-600 hover:bg-blue-50 font-medium flex items-center gap-3 transition-colors"
+                               className="w-full text-left px-3 py-2 text-[13px] text-blue-600 hover:bg-blue-50 rounded-lg font-medium flex items-center gap-3 transition-colors"
                              >
                                <Cloud className="w-4 h-4" />
-                               <span>设置同步文件夹 (Connect Folder)</span>
+                               <span>{t.set_folder}</span>
                              </button>
                           )}
                       </div>
@@ -415,39 +435,41 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
               <button
                 onClick={() => setActiveMenu(activeMenu === 'import' ? null : 'import')}
                 className={`
-                  flex items-center gap-1.5 text-sm font-medium transition-colors
-                  ${activeMenu === 'import' ? 'text-gray-900' : 'text-gray-500 hover:text-gray-900'}
+                  flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors
+                  ${activeMenu === 'import' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}
                 `}
               >
-                <Plus className="w-4 h-4" />
-                <span>导入</span>
-                <ChevronDown className={`w-3 h-3 transition-transform ${activeMenu === 'import' ? 'rotate-180' : ''}`} />
+                <Plus className="w-[18px] h-[18px]" />
+                <span className="text-[14px] hidden md:inline font-normal">{t.import}</span>
+                <ChevronDown className={`w-3 h-3 opacity-50 transition-transform ${activeMenu === 'import' ? 'rotate-180' : ''}`} />
               </button>
 
               {activeMenu === 'import' && (
-                <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden z-40 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
-                    <button
-                      onClick={() => { setActiveMenu(null); fileInputRef.current?.click(); }}
-                      className="w-full text-left px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 flex items-center gap-3 transition-colors"
-                    >
-                      <FileText className="w-4 h-4" />
-                      <span>添加文件</span>
-                    </button>
-                    <button
-                      onClick={handleScanFolderClick}
-                      className="w-full text-left px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 flex items-center gap-3 transition-colors"
-                    >
-                      <FolderInput className="w-4 h-4" />
-                      <span>扫描文件夹</span>
-                    </button>
-                    <div className="h-px bg-gray-50"></div>
-                    <button
-                      onClick={() => { setActiveMenu(null); backupInputRef.current?.click(); }}
-                      className="w-full text-left px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 flex items-center gap-3 transition-colors"
-                    >
-                      <FileUp className="w-4 h-4" />
-                      <span>恢复备份</span>
-                    </button>
+                <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-40 animate-in fade-in zoom-in-95 duration-100 origin-top-right ring-1 ring-black/5">
+                    <div className="p-1.5 space-y-0.5">
+                      <button
+                        onClick={() => { setActiveMenu(null); fileInputRef.current?.click(); }}
+                        className="w-full text-left px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-lg flex items-center gap-3 transition-colors"
+                      >
+                        <FileText className="w-4 h-4 opacity-70" />
+                        <span>{t.import_file}</span>
+                      </button>
+                      <button
+                        onClick={handleScanFolderClick}
+                        className="w-full text-left px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-lg flex items-center gap-3 transition-colors"
+                      >
+                        <FolderInput className="w-4 h-4 opacity-70" />
+                        <span>{t.scan_folder}</span>
+                      </button>
+                      <div className="my-1 border-t border-gray-100 mx-2"></div>
+                      <button
+                        onClick={() => { setActiveMenu(null); backupInputRef.current?.click(); }}
+                        className="w-full text-left px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-lg flex items-center gap-3 transition-colors"
+                      >
+                        <FileUp className="w-4 h-4 opacity-70" />
+                        <span>{t.restore_backup}</span>
+                      </button>
+                    </div>
                 </div>
               )}
             </div>
@@ -457,24 +479,26 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
               <button
                 onClick={() => setActiveMenu(activeMenu === 'export' ? null : 'export')}
                 className={`
-                  flex items-center gap-1.5 text-sm font-medium transition-colors
-                  ${activeMenu === 'export' ? 'text-gray-900' : 'text-gray-500 hover:text-gray-900'}
+                  flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors
+                  ${activeMenu === 'export' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}
                 `}
               >
-                <Download className="w-4 h-4" />
-                <span>导出</span>
-                <ChevronDown className={`w-3 h-3 transition-transform ${activeMenu === 'export' ? 'rotate-180' : ''}`} />
+                <Download className="w-[18px] h-[18px]" />
+                <span className="text-[14px] hidden md:inline font-normal">{t.export}</span>
+                <ChevronDown className={`w-3 h-3 opacity-50 transition-transform ${activeMenu === 'export' ? 'rotate-180' : ''}`} />
               </button>
 
                {activeMenu === 'export' && (
-                <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden z-40 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
-                    <button
-                      onClick={() => { setActiveMenu(null); onExportBackup(); }}
-                      className="w-full text-left px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 flex items-center gap-3 transition-colors"
-                    >
-                      <FileDown className="w-4 h-4" />
-                      <span>备份数据</span>
-                    </button>
+                <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-40 animate-in fade-in zoom-in-95 duration-100 origin-top-right ring-1 ring-black/5">
+                    <div className="p-1.5">
+                      <button
+                        onClick={() => { setActiveMenu(null); onExportBackup(); }}
+                        className="w-full text-left px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-lg flex items-center gap-3 transition-colors"
+                      >
+                        <FileDown className="w-4 h-4 opacity-70" />
+                        <span>{t.backup_data}</span>
+                      </button>
+                    </div>
                 </div>
               )}
             </div>
@@ -488,49 +512,31 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
           <input type="file" ref={backupInputRef} className="hidden" accept=".json" onChange={(e) => e.target.files?.[0] && onRestoreBackup(e.target.files[0])} />
         </div>
 
-        {/* Tabs */}
-        <div className="flex items-center gap-6 overflow-x-auto no-scrollbar mb-8 pointer-events-none">
-          {TABS.map((tab) => (
+        {/* Tabs (Segmented Control Style) */}
+        <div className="flex items-center gap-8 border-b border-gray-200/60 mb-8 pointer-events-none">
+          {TABS_KEYS.map((key) => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
+              key={key}
+              onClick={() => setActiveTabKey(key)}
               className={`
-                whitespace-nowrap text-sm pb-1 transition-all relative font-medium pointer-events-auto
-                ${activeTab === tab ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'}
+                pb-3 text-sm transition-all relative pointer-events-auto
+                ${activeTabKey === key 
+                  ? 'text-gray-900 font-medium after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-gray-900 after:rounded-t-full' 
+                  : 'text-gray-500 font-normal hover:text-gray-700'
+                }
               `}
             >
-              {tab}
+              {t[key]}
             </button>
           ))}
         </div>
 
         {/* Book Grid */}
         <div 
-          className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-6 gap-y-10 selection-zone"
+          className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-5 gap-y-10 selection-zone"
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
-          {books.length === 0 && (
-            <div 
-              onClick={() => fileInputRef.current?.click()}
-              className="
-                group relative aspect-[2/3] w-full 
-                flex flex-col items-center justify-center
-                border-2 border-dashed border-gray-200 
-                rounded-2xl bg-gray-50/50
-                cursor-pointer transition-all duration-300
-                hover:border-gray-300 hover:bg-white hover:shadow-sm
-              "
-            >
-               <div className="p-4 rounded-full bg-white shadow-sm border border-gray-100 group-hover:scale-110 transition-transform duration-300">
-                 <Plus className="w-6 h-6 text-gray-400 group-hover:text-gray-600 transition-colors" />
-               </div>
-               <div className="mt-4 text-[11px] font-sans font-medium text-gray-400 group-hover:text-gray-600 transition-colors tracking-wide">
-                 ADD BOOK
-               </div>
-            </div>
-          )}
-
           {sortedBooks.map((book) => {
             const totalUnits = book.chapters && book.chapters.length > 0 ? book.chapters.length : Math.max(1, Math.ceil(book.content.length / 3000));
             const percentage = calculateProgress(book.currentPageIndex, totalUnits);
@@ -561,24 +567,27 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
               >
                 <div 
                   className={`
-                    relative aspect-[2/3] w-full bg-white shadow-sm border overflow-hidden rounded-md transition-all duration-300 
-                    ${isSelected ? 'ring-4 ring-blue-500/50 border-blue-500 translate-y-[-4px]' : 'border-gray-200 group-hover:-translate-y-1'}
+                    relative aspect-[2/3] w-full bg-white shadow-sm border overflow-hidden rounded-lg transition-all duration-300 
+                    ${isSelected 
+                      ? 'ring-2 ring-blue-500 border-blue-500 translate-y-[-4px] shadow-md' 
+                      : 'border-gray-200 group-hover:shadow-md group-hover:-translate-y-1'
+                    }
                   `}
                 >
                   {book.coverImage ? (
-                    <img src={book.coverImage} alt={book.title} className="w-full h-full object-cover grayscale-[20%] group-hover:grayscale-0 transition-all duration-500" />
+                    <img src={book.coverImage} alt={book.title} className="w-full h-full object-cover grayscale-[10%] group-hover:grayscale-0 transition-all duration-500" />
                   ) : (
-                    <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center">
-                       <div className="text-[9px] uppercase tracking-widest text-gray-400 mb-2 font-mono">{book.publisher || 'LIBRARY'}</div>
+                    <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-gray-50/30">
+                       <div className="text-[9px] uppercase tracking-widest text-gray-400 mb-2 font-mono">{book.publisher || 'BOOK'}</div>
                        <h3 className="text-gray-900 font-serif font-bold text-lg leading-tight line-clamp-3 mb-2">{book.title}</h3>
                        {book.author && <p className="text-[10px] text-gray-500 uppercase tracking-wide">{book.author}</p>}
                     </div>
                   )}
 
                   {isSelected && (
-                    <div className="absolute inset-0 bg-blue-500/10 flex items-center justify-center z-20">
-                       <div className="bg-blue-500 text-white rounded-full p-2 shadow-lg scale-110">
-                          <Check className="w-6 h-6" />
+                    <div className="absolute inset-0 bg-blue-500/10 flex items-center justify-center z-20 backdrop-blur-[1px]">
+                       <div className="bg-blue-600 text-white rounded-full p-2 shadow-lg scale-110">
+                          <Check className="w-5 h-5" />
                        </div>
                     </div>
                   )}
@@ -586,29 +595,62 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
                   <button
                       onClick={(e) => requestDelete(e, book.id)}
                       className={`
-                        absolute top-2 right-2 p-1.5 bg-white text-red-500 rounded-full border border-gray-200 shadow-sm
+                        absolute top-2 right-2 p-1.5 bg-white text-red-500 rounded-full border border-gray-100 shadow-sm
                         hover:bg-red-50 transition-all duration-200 z-30
                         ${isHoveringId === book.id || isSelected ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-90 pointer-events-none'}
                       `}
-                      title="Delete"
+                      title={t.delete}
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                <div>
-                  <h3 className={`text-[13px] font-medium leading-tight line-clamp-1 mb-0.5 ${isSelected ? 'text-blue-600 font-bold' : 'text-gray-900'}`}>{book.title}</h3>
-                  <p className="text-[11px] text-gray-400 font-mono">
-                    {percentage === 0 ? 'UNREAD' : `${percentage}% DONE`}
-                  </p>
+                <div className="space-y-0.5">
+                  <h3 className={`text-[14px] font-medium leading-snug line-clamp-2 ${isSelected ? 'text-blue-600' : 'text-gray-800 group-hover:text-gray-900'}`}>{book.title}</h3>
+                  <div className="flex items-center justify-between">
+                     <p className="text-[11px] text-gray-400 font-medium">
+                       {percentage === 0 ? t.not_started : `${percentage}%`}
+                     </p>
+                     {book.lastReadAt > 0 && percentage > 0 && (
+                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50"></div>
+                     )}
+                  </div>
                 </div>
               </div>
             );
           })}
+          
+          {/* Add Book Card (Hybrid Style) */}
+          <div 
+            onClick={() => fileInputRef.current?.click()}
+            className="
+              group relative aspect-[2/3] w-full 
+              flex flex-col items-center justify-center
+              border border-gray-200 
+              rounded-xl bg-white
+              shadow-[0_2px_8px_rgba(0,0,0,0.02)]
+              cursor-pointer transition-all duration-300
+              hover:border-blue-300 hover:shadow-[0_4px_12px_rgba(59,130,246,0.15)] hover:-translate-y-1
+            "
+          >
+              <div className="w-10 h-10 rounded-full bg-gray-50 border border-gray-100 flex items-center justify-center group-hover:bg-blue-50 group-hover:border-blue-100 transition-colors duration-300">
+                <Plus className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
+              </div>
+              <div className="mt-3 text-[13px] font-medium text-gray-400 group-hover:text-blue-600 transition-colors">
+                {t.add_book}
+              </div>
+          </div>
         </div>
 
+        {/* Empty State Hint */}
+        {books.length === 0 && (
+           <div className="mt-8 ml-1">
+              <p className="text-gray-400 text-sm font-light">{t.empty_hint}</p>
+           </div>
+        )}
+
         {sortedBooks.length === 0 && books.length > 0 && searchQuery && (
-           <div className="text-center mt-20 text-gray-400 text-sm">No matching books found.</div>
+           <div className="text-center mt-20 text-gray-400 text-sm">{t.no_results}</div>
         )}
       </div>
     </div>

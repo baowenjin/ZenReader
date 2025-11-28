@@ -18,11 +18,13 @@ export enum FontFamily {
 }
 
 export type AILanguage = 'auto' | 'zh' | 'en';
+export type AppLanguage = 'auto' | 'zh' | 'en';
 
 export type PdfViewMode = 'scroll' | 'single' | 'double';
 export type PdfFitMode = 'width' | 'height' | 'manual';
 
 export interface ReaderSettings {
+  language: AppLanguage; // Interface language
   theme: ThemeType;
   fontSize: number;
   lineHeight: number;
