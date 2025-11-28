@@ -238,6 +238,8 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
 
   // @ts-ignore
   const showSyncButton = !!window.showDirectoryPicker;
+  
+  const showReconnectButton = hasSavedSync && !isSyncConnected && onReconnectSync && syncStatus !== 'syncing';
 
   const selectionStyle: React.CSSProperties | undefined = selectionBox ? {
     position: 'fixed',
@@ -364,19 +366,39 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
             {/* Sync Dropdown */}
             {showSyncButton && (
               <div className="relative" ref={syncMenuRef}>
-                <button
-                  onClick={() => setActiveMenu(activeMenu === 'sync' ? null : 'sync')}
-                  className={`
-                    flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all text-sm font-medium
-                    ${activeMenu === 'sync' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}
-                    ${isSyncConnected ? 'bg-blue-50/50 text-blue-700 hover:bg-blue-50' : ''}
-                  `}
-                  title={t.sync}
-                >
-                  {getSyncIcon()}
-                  <span className="hidden sm:inline">{t.sync}</span>
-                  <ChevronDown className={`w-3 h-3 opacity-50 transition-transform ${activeMenu === 'sync' ? 'rotate-180' : ''}`} />
-                </button>
+                {showReconnectButton ? (
+                  <div className="flex items-center rounded-md bg-amber-50 text-amber-700 border border-amber-200/60 shadow-sm hover:shadow-md transition-all group">
+                     <button
+                        onClick={onReconnectSync}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border-r border-amber-200/60 hover:bg-amber-100 transition-colors rounded-l-md"
+                        title={t.reconnect_sync}
+                     >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">{t.reconnect_sync}</span>
+                     </button>
+                     <button
+                        onClick={() => setActiveMenu(activeMenu === 'sync' ? null : 'sync')}
+                        className="px-1.5 py-1.5 hover:bg-amber-100 transition-colors rounded-r-md"
+                        title={t.sync}
+                     >
+                        <ChevronDown className={`w-3.5 h-3.5 opacity-60 transition-transform ${activeMenu === 'sync' ? 'rotate-180' : ''}`} />
+                     </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setActiveMenu(activeMenu === 'sync' ? null : 'sync')}
+                    className={`
+                      flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all text-sm font-medium
+                      ${activeMenu === 'sync' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}
+                      ${isSyncConnected ? 'bg-blue-50/50 text-blue-700 hover:bg-blue-50' : ''}
+                    `}
+                    title={t.sync}
+                  >
+                    {getSyncIcon()}
+                    <span className="hidden sm:inline">{t.sync}</span>
+                    <ChevronDown className={`w-3 h-3 opacity-50 transition-transform ${activeMenu === 'sync' ? 'rotate-180' : ''}`} />
+                  </button>
+                )}
 
                 {activeMenu === 'sync' && (
                   <div className="absolute top-full right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-40 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
