@@ -87,7 +87,7 @@ const App: React.FC = () => {
       try {
          // Verify permission silently first (usually cached by browser session)
          // If permission is lost, this might fail, which is expected.
-         const hasPerm = await verifyPermission(syncHandle, true); 
+         const hasPerm = await verifyPermission(syncHandle, false); 
          if (!hasPerm) {
              setSyncStatus('error'); // Permission lost in background
              return;
@@ -301,7 +301,7 @@ const App: React.FC = () => {
           setIsLoading(true);
           setSyncStatus('syncing');
 
-          // 1. Verify Permission
+          // 1. Verify Permission (Prompt User if needed)
           const granted = await verifyPermission(dirHandle, true);
           if (!granted) {
               alert("Permission denied to access the sync folder. Please try again.");
@@ -374,7 +374,7 @@ const App: React.FC = () => {
           // Done
           setIsSyncConnected(true);
           setSyncStatus('success');
-          alert("Sync Connected! Your library is now staying in sync with this folder.");
+          // alert("Sync Connected! Your library is now staying in sync with this folder.");
 
       } catch (err) {
           console.error("Sync Logic Error", err);
@@ -416,6 +416,13 @@ const App: React.FC = () => {
           }
           setSyncStatus('error');
       }
+  };
+
+  const handleReconnectSync = async () => {
+     if (syncHandle) {
+         // Reusing the handle will trigger permission prompt if permission is gone (e.g. refresh)
+         await performConnectAndSync(syncHandle);
+     }
   };
 
   const handleManualSync = async () => {
@@ -649,6 +656,8 @@ const App: React.FC = () => {
           onDeleteBooks={handleDeleteBooks}
           onConnectSync={handleConnectSyncFolder}
           onManualSync={handleManualSync}
+          onReconnectSync={handleReconnectSync}
+          hasSavedSync={!!syncHandle}
           isSyncConnected={isSyncConnected}
           syncFolderName={syncFolderName}
           syncStatus={syncStatus}

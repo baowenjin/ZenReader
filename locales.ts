@@ -36,6 +36,8 @@ export const translations = {
     sync_now: '立即同步',
     change_folder: '修改同步文件夹',
     set_folder: '设置同步文件夹',
+    reconnect_sync: '重新连接',
+    permission_required: '需要权限恢复同步',
     
     import: '导入',
     import_file: '添加文件',
@@ -124,6 +126,8 @@ export const translations = {
     sync_now: 'Sync Now',
     change_folder: 'Change Folder',
     set_folder: 'Set Sync Folder',
+    reconnect_sync: 'Reconnect Sync',
+    permission_required: 'Permission Required',
 
     import: 'Import',
     import_file: 'Add Files',

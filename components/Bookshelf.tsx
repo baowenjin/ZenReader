@@ -15,7 +15,9 @@ interface BookshelfProps {
   onDeleteBooks: (ids: string[], deleteLocal: boolean) => void;
   onConnectSync: () => void;
   onManualSync: () => void;
+  onReconnectSync?: () => void;
   isSyncConnected: boolean;
+  hasSavedSync?: boolean;
   syncFolderName: string | null;
   syncStatus?: 'idle' | 'syncing' | 'success' | 'error';
   language: Locale;
@@ -33,7 +35,9 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
   onDeleteBooks,
   onConnectSync,
   onManualSync,
+  onReconnectSync,
   isSyncConnected,
+  hasSavedSync = false,
   syncFolderName,
   syncStatus = 'idle',
   language
@@ -385,7 +389,7 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
                               {isSyncConnected ? t.connected : t.disconnected}
                             </span>
                         </div>
-                        {isSyncConnected && syncFolderName && (
+                        {hasSavedSync && syncFolderName && (
                            <div className="flex items-center gap-1.5 mt-2 text-xs text-gray-500 truncate bg-white border border-gray-200 rounded px-2 py-1" title={syncFolderName}>
                               <Folder className="w-3 h-3 flex-shrink-0 text-blue-500" />
                               <span className="truncate font-mono">{syncFolderName}</span>
@@ -414,13 +418,37 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
                               </button>
                              </>
                           ) : (
-                             <button
-                               onClick={() => { setActiveMenu(null); onConnectSync(); }}
-                               className="w-full text-left px-3 py-2 text-[13px] text-blue-600 hover:bg-blue-50 rounded-lg font-medium flex items-center gap-3 transition-colors"
-                             >
-                               <Cloud className="w-4 h-4" />
-                               <span>{t.set_folder}</span>
-                             </button>
+                             hasSavedSync && onReconnectSync ? (
+                               <>
+                                 <div className="px-3 py-2 text-xs text-amber-600 bg-amber-50 rounded-lg mb-1 flex items-center gap-1">
+                                   <AlertCircle className="w-3 h-3" />
+                                   {t.permission_required}
+                                 </div>
+                                 <button
+                                   onClick={() => { setActiveMenu(null); onReconnectSync(); }}
+                                   className="w-full text-left px-3 py-2 text-[13px] text-blue-600 hover:bg-blue-50 rounded-lg font-medium flex items-center gap-3 transition-colors"
+                                 >
+                                   <RefreshCw className="w-4 h-4" />
+                                   <span>{t.reconnect_sync}</span>
+                                 </button>
+                                 <button
+                                   onClick={() => { setActiveMenu(null); onConnectSync(); }}
+                                   className="w-full text-left px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-lg flex items-center gap-3 transition-colors"
+                                 >
+                                   <Settings2 className="w-4 h-4 opacity-70" />
+                                   <span>{t.change_folder}</span>
+                                 </button>
+                               </>
+                             ) : (
+                               <button
+                                 onClick={() => { setActiveMenu(null); onConnectSync(); }}
+                                 className="w-full text-left px-3 py-2 text-[13px] text-blue-600 hover:bg-blue-50 rounded-lg font-medium flex items-center gap-3 transition-colors"
+                                 title="Requires Chrome/Edge/Opera"
+                               >
+                                 <Cloud className="w-4 h-4" />
+                                 <span>{t.set_folder}</span>
+                               </button>
+                             )
                           )}
                       </div>
                   </div>
