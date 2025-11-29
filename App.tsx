@@ -390,7 +390,7 @@ const App: React.FC = () => {
   const handleConnectSyncFolder = async () => {
       // 0. Compatibility Check
       if (!('showDirectoryPicker' in window)) {
-         alert("Your browser does not support the File System Access API required for Cloud Sync.\nPlease use Chrome, Edge, or Opera on Desktop.");
+         alert("Sync Feature Not Supported in this Browser.\n\nDue to Apple's security restrictions, Safari does not support the File System Access API required for real-time sync.\n\nPlease use Chrome, Edge, or Opera on Desktop for this feature.\n\nYou can still use the 'Import' button to add files manually.");
          return;
       }
 

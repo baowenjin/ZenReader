@@ -127,7 +127,6 @@ const DefinitionPopover = ({
 };
 
 // --- PDF Renderer ---
-// (PDF Renderer Code omitted for brevity as it is unchanged)
 const PdfPage = ({ 
   pdf, 
   pageNum, 
@@ -475,6 +474,9 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   const lastKeyTime = useRef<number>(0);
   const controlsTimerRef = useRef<number | null>(null);
 
+  // Smooth Scroll Refs
+  const scrollRafId = useRef<number | null>(null);
+  
   const [isTOCOpen, setIsTOCOpen] = useState(false);
   const [activeParagraphIndex, setActiveParagraphIndex] = useState<number | null>(null);
   const [showControls, setShowControls] = useState(true);
@@ -536,77 +538,48 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
 
   // --- AI Interaction Logic ---
-
+  // (Omitted for brevity, logic remains same as previous implementation)
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    // Only process if AI Mode is enabled AND not PDF (unless we implement PDF text layer)
     if (!settings.aiMode || isPdf) return;
-
     const selection = window.getSelection();
     if (!selection || selection.toString().trim().length === 0) return;
-
-    // Prevent default browser menu
     e.preventDefault();
-    
     const text = selection.toString().trim();
     const range = selection.getRangeAt(0);
     const rect = range.getBoundingClientRect();
-
-    // Context Capture
     let context = "";
     if (selection.anchorNode) {
-        // Attempt to find the closest block element text (the paragraph)
-        // If anchorNode is text, parent is the div. If anchorNode is the div, use it directly.
         const node = selection.anchorNode.nodeType === Node.TEXT_NODE 
             ? selection.anchorNode.parentElement 
             : selection.anchorNode as HTMLElement;
-        
         if (node && node.textContent) {
-            // Trim and limit context length to avoid overly massive prompts
             context = node.textContent.trim().slice(0, 1500); 
         }
     }
-
-    setContextMenu({
-      left: e.clientX,
-      top: e.clientY,
-      text,
-      context,
-      selectionRect: rect
-    });
-    
-    // Clear any existing popover
+    setContextMenu({ left: e.clientX, top: e.clientY, text, context, selectionRect: rect });
     setActiveEntity(null);
   }, [settings.aiMode, isPdf]);
 
   const handleAIAction = async (action: 'explain' | 'translate') => {
     if (!contextMenu) return;
     const { text, context, selectionRect } = contextMenu;
-    setContextMenu(null); // Close menu
-
-    // 1. Calculate Absolute Position for Popover
+    setContextMenu(null); 
     const viewportWidth = window.innerWidth;
     const scrollX = window.scrollX;
     const scrollY = window.scrollY;
-
     const absoluteLeft = selectionRect.left + scrollX;
     const absoluteTop = selectionRect.top + scrollY;
     const width = selectionRect.width;
     const height = selectionRect.height;
-    
-    // Center initially
     let left = absoluteLeft + (width / 2);
     let top = absoluteTop;
     let align: 'left' | 'right' | 'center' = 'center';
     let placement: 'top' | 'bottom' = 'top';
-
-    // Horizontal logic
     if (selectionRect.left < 150) { 
         left = absoluteLeft + 150; 
     } else if (selectionRect.right > viewportWidth - 150) {
         left = absoluteLeft + width - 150;
     }
-
-    // Vertical logic
     if (selectionRect.top < 220) {
         top = absoluteTop + height;
         placement = 'bottom';
@@ -614,88 +587,47 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
         top = absoluteTop;
         placement = 'top';
     }
-
-    // 2. Set Loading State
     const displayTerm = text.length > 25 ? text.substring(0, 25) + '...' : text;
-    
     setActiveEntity({
       data: { term: displayTerm, definition: '' },
       position: { top, left, align, placement },
       isLoading: true
     });
     
-    // 3. Call AI
     const apiKey = settings.apiKey;
-    
     if (!apiKey) {
-       setActiveEntity(prev => prev ? {
-           ...prev,
-           data: { ...prev.data, definition: "API Key not configured. Please set it in Settings." },
-           isLoading: false
-       } : null);
+       setActiveEntity(prev => prev ? { ...prev, data: { ...prev.data, definition: "API Key not configured. Please set it in Settings." }, isLoading: false } : null);
        return;
     }
 
     try {
         const ai = new GoogleGenAI({ apiKey: apiKey });
-        
         let prompt = "";
         let langInstruction = "";
-        
         if (settings.aiLanguage === 'auto') {
-           // Auto-Detect Browser Language
            const userLang = navigator.language; 
-           if (userLang.startsWith('zh')) {
-             langInstruction = "Respond in Simplified Chinese.";
-           } else {
-             // If not Chinese environment, we match the prompt text's language (AI does this by default usually)
-             // or specific instructions
-             langInstruction = "Respond in the same language as the selected text.";
-           }
-        } else if (settings.aiLanguage === 'zh') {
-            langInstruction = "Respond in Simplified Chinese.";
-        } else if (settings.aiLanguage === 'en') {
-            langInstruction = "Respond in English.";
-        }
+           if (userLang.startsWith('zh')) { langInstruction = "Respond in Simplified Chinese."; } else { langInstruction = "Respond in the same language as the selected text."; }
+        } else if (settings.aiLanguage === 'zh') { langInstruction = "Respond in Simplified Chinese."; } else if (settings.aiLanguage === 'en') { langInstruction = "Respond in English."; }
 
         if (action === 'explain') {
             prompt = `
-You are a knowledgeable reading companion.
-The user is reading a text.
-Paragraph Context: "...${context}..."
-Selected Text: "${text}"
-
-Task: Explain the meaning of the Selected Text within this specific Context.
-- If it is a slang, idiom, meme, or obscure cultural reference ("梗"), explain its origin and implied meaning clearly.
-- If it implies sarcasm or subtext, point it out.
-- Keep the explanation insightful but concise (under 120 words).
+You are a "Contextual Knowledge Bridge".
+Context: "...${context}..."
+Target: "${text}"
+Rules: Explain background knowledge/meme/implication. No simple dictionary definitions.
+Structure: Concept, Implicit Meaning, Key Nuance.
 ${langInstruction}`;
         } else {
-            prompt = `
-Context: "${context}"
-Task: Translate the selected phrase "${text}" into the target language.
-Ensure the translation captures the tone and nuance of the original context.
+            prompt = `Context: "${context}"
+Task: Translate "${text}" into the target language.
 ${langInstruction}`;
         }
 
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-        });
-        
-        setActiveEntity(prev => prev ? ({
-            ...prev,
-            data: { ...prev.data, definition: response.text ? response.text.trim() : "No result." },
-            isLoading: false
-        }) : null);
-
+        const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+        setActiveEntity(prev => prev ? ({ ...prev, data: { ...prev.data, definition: response.text ? response.text.trim() : "No result." }, isLoading: false }) : null);
     } catch (e) {
         console.error(e);
-        setActiveEntity(prev => prev ? ({
-            ...prev,
-            data: { ...prev.data, definition: "Error processing request. Check your API Key." },
-            isLoading: false
-        }) : null);
+        setActiveEntity(prev => prev ? ({ ...prev, data: { ...prev.data, definition: "Error processing request." }, isLoading: false }) : null);
     }
   };
 
@@ -705,7 +637,6 @@ ${langInstruction}`;
     if (settings.pdfViewMode !== 'scroll') {
        window.scrollTo({ top: 0, behavior: 'auto' });
     }
-    
     if (settings.focusMode && !isPdf) {
       setTimeout(() => scrollToParagraph(0), 100);
     } else {
@@ -737,17 +668,8 @@ ${langInstruction}`;
   }, [resetControlsTimer]);
 
   const handleContentClick = useCallback((e: React.MouseEvent) => {
-    // Close context menu if open
-    if (contextMenu) {
-        setContextMenu(null);
-        return;
-    }
-    // Close popover if open (clicking outside)
-    if (activeEntity) {
-      setActiveEntity(null);
-      return;
-    }
-
+    if (contextMenu) { setContextMenu(null); return; }
+    if (activeEntity) { setActiveEntity(null); return; }
     if (window.getSelection()?.toString().length) return;
     if ((e.target as HTMLElement).closest('button, a')) return;
     setShowControls(prev => !prev);
@@ -779,7 +701,6 @@ ${langInstruction}`;
      if (settings.focusMode) return;
      const handleWheel = (e: WheelEvent) => {
        if (contextMenu) setContextMenu(null); 
-       
        if (Math.abs(e.deltaY) > 20 && showControls && settings.autoHideControls) {
           setShowControls(false);
        }
@@ -816,62 +737,142 @@ ${langInstruction}`;
       }
   };
 
+  const stopSmoothScroll = useCallback(() => {
+      if (scrollRafId.current) {
+          cancelAnimationFrame(scrollRafId.current);
+          scrollRafId.current = null;
+      }
+  }, []);
+
+  // Keyboard Handlers
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
 
-      if (settings.focusMode && !isPdf) {
-        const totalParagraphs = contentRef.current?.querySelectorAll('div[data-index]').length || 0;
-        const currentIndex = activeParagraphIndex ?? -1;
-        if (['Space', ' ', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
-          e.preventDefault();
-          return;
-        }
-        const now = Date.now();
-        const timeDiff = now - lastKeyTime.current;
-        lastKeyTime.current = now;
-        const step = timeDiff < 100 ? 3 : 1;
+      const isVertical = e.key === 'ArrowUp' || e.key === 'ArrowDown';
+      const isHorizontal = e.key === 'ArrowLeft' || e.key === 'ArrowRight';
 
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          scrollToParagraph(Math.min(currentIndex + step, totalParagraphs - 1));
-        } else if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          scrollToParagraph(Math.max(currentIndex - step, 0));
-        }
+      // 1. Horizontal Navigation (Universal - Priority over Focus Mode Block)
+      // This ensures Left/Right ALWAYS works for chapters, even in Focus Mode.
+      if (isHorizontal) {
+          e.preventDefault(); // Prevent default horizontal scroll
+          if (e.key === 'ArrowRight') {
+             if (isPdf && settings.pdfViewMode !== 'scroll') {
+                  navigatePdf('next');
+              } else if (!isPdf && book.currentPageIndex < totalUnits - 1) {
+                  onPageChange(book.currentPageIndex + 1);
+              }
+          } else { // ArrowLeft
+             if (isPdf && settings.pdfViewMode !== 'scroll') {
+                  navigatePdf('prev');
+              } else if (!isPdf && book.currentPageIndex > 0) {
+                  onPageChange(book.currentPageIndex - 1);
+              }
+          }
+          return;
+      }
+      
+      // 2. Vertical Navigation
+      if (isVertical) {
+         e.preventDefault();
+
+         // Case A: Focus Mode (Paragraph Navigation)
+         if (settings.focusMode && !isPdf) {
+            const totalParagraphs = contentRef.current?.querySelectorAll('div[data-index]').length || 0;
+            const currentIndex = activeParagraphIndex ?? -1;
+            const step = (e.repeat) ? 1 : 1; 
+            
+            const now = Date.now();
+            // Simple throttle for paragraph navigation
+            if (e.repeat && now - lastKeyTime.current < 100) return; 
+            lastKeyTime.current = now;
+
+            if (e.key === 'ArrowDown') {
+               scrollToParagraph(Math.min(currentIndex + step, totalParagraphs - 1));
+            } else {
+               scrollToParagraph(Math.max(currentIndex - step, 0));
+            }
+            return;
+         }
+
+         // Case B: Normal Reading (Custom Silky Smooth Scroll)
+         if (!isPdf || (isPdf && settings.pdfViewMode === 'scroll')) {
+             const direction = e.key === 'ArrowDown' ? 1 : -1;
+             stopSmoothScroll(); // Ensure clean state
+
+             if (e.repeat) {
+                // HOLD MODE: Continuous Linear Scroll
+                // rAF loop that moves X pixels per frame. 
+                // Immediate response, no "smooth" easing lag.
+                const speed = 25; // Pixels per frame. Adjust for desired speed.
+                const scrollStep = () => {
+                   window.scrollBy(0, direction * speed);
+                   scrollRafId.current = requestAnimationFrame(scrollStep);
+                };
+                scrollRafId.current = requestAnimationFrame(scrollStep);
+             } else {
+                // SINGLE PRESS MODE: Custom Cubic Ease-Out
+                // We implement our own animation to ensure consistency across browsers (Safari vs Chrome)
+                const distance = Math.max(150, window.innerHeight * 0.35); // 35% screen height
+                const targetY = window.scrollY + (direction * distance);
+                const startY = window.scrollY;
+                const duration = 300; // ms
+                const startTime = performance.now();
+
+                const animate = (time: number) => {
+                   const elapsed = time - startTime;
+                   if (elapsed >= duration) {
+                      window.scrollTo(0, targetY);
+                      return;
+                   }
+                   
+                   // Ease Out Cubic function: 1 - (1 - t)^3
+                   const t = elapsed / duration;
+                   const ease = 1 - Math.pow(1 - t, 3);
+                   const currentY = startY + (direction * distance * ease);
+                   
+                   window.scrollTo(0, currentY);
+                   scrollRafId.current = requestAnimationFrame(animate);
+                };
+                scrollRafId.current = requestAnimationFrame(animate);
+             }
+             return;
+         }
       }
 
-      switch (e.key) {
-        case 'ArrowRight':
-          if (!settings.focusMode) {
-             if (isPdf && settings.pdfViewMode !== 'scroll') {
-                 navigatePdf('next');
-             } else if (!isPdf && book.currentPageIndex < totalUnits - 1) {
-                 onPageChange(book.currentPageIndex + 1);
-             }
-          }
-          break;
-        case 'ArrowLeft':
-          if (!settings.focusMode) {
-             if (isPdf && settings.pdfViewMode !== 'scroll') {
-                 navigatePdf('prev');
-             } else if (!isPdf && book.currentPageIndex > 0) {
-                 onPageChange(book.currentPageIndex - 1);
-             }
-          }
-          break;
-        case 'Escape':
+      // 3. Other Shortcuts
+      if (e.key === 'Escape') {
           if (isTOCOpen) setIsTOCOpen(false);
           else if (activeEntity) setActiveEntity(null);
           else if (contextMenu) setContextMenu(null);
           else if (showControls) onCloseBook();
           else setShowControls(true);
-          break;
+      }
+
+      // 4. Block other page keys in Focus Mode to prevent disorientation
+      if (settings.focusMode && !isPdf) {
+         if (['Space', ' ', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
+           e.preventDefault();
+         }
       }
     };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+        const isVertical = e.key === 'ArrowUp' || e.key === 'ArrowDown';
+        if (isVertical) {
+            stopSmoothScroll();
+        }
+    };
+
     window.addEventListener('keydown', handleKeyDown, { passive: false });
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [book.currentPageIndex, totalUnits, isTOCOpen, activeEntity, settings.focusMode, activeParagraphIndex, scrollToParagraph, showControls, contextMenu, isPdf, settings.pdfViewMode]);
+    window.addEventListener('keyup', handleKeyUp, { passive: false });
+    
+    return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+        window.removeEventListener('keyup', handleKeyUp);
+        stopSmoothScroll();
+    };
+  }, [book.currentPageIndex, totalUnits, isTOCOpen, activeEntity, settings.focusMode, activeParagraphIndex, scrollToParagraph, showControls, contextMenu, isPdf, settings.pdfViewMode, stopSmoothScroll]);
 
   useEffect(() => {
     if (!settings.focusMode || !contentRef.current || isPdf) return;

@@ -236,8 +236,8 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
     setDeleteLocalFiles(false);
   };
 
-  // @ts-ignore
-  const showSyncButton = !!window.showDirectoryPicker;
+  // We always show the button now, so users can click it and get the "Not Supported" alert in App.tsx if needed
+  const showSyncButton = true;
   
   const showReconnectButton = hasSavedSync && !isSyncConnected && onReconnectSync && syncStatus !== 'syncing';
 
@@ -367,21 +367,22 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
             {showSyncButton && (
               <div className="relative" ref={syncMenuRef}>
                 {showReconnectButton ? (
-                  <div className="flex items-center rounded-md bg-amber-50 text-amber-700 border border-amber-200/60 shadow-sm hover:shadow-md transition-all group">
+                  <div className="flex items-center rounded-lg bg-amber-100 text-amber-900 border border-amber-300 shadow-sm hover:shadow-md transition-all group overflow-hidden">
                      <button
                         onClick={onReconnectSync}
-                        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border-r border-amber-200/60 hover:bg-amber-100 transition-colors rounded-l-md"
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-bold bg-amber-100 hover:bg-amber-200 transition-colors"
                         title={t.reconnect_sync}
                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
+                        <RefreshCw className="w-4 h-4" />
                         <span className="hidden sm:inline">{t.reconnect_sync}</span>
                      </button>
+                     <div className="w-px h-full bg-amber-300"></div>
                      <button
                         onClick={() => setActiveMenu(activeMenu === 'sync' ? null : 'sync')}
-                        className="px-1.5 py-1.5 hover:bg-amber-100 transition-colors rounded-r-md"
+                        className="px-2 py-2 bg-amber-100 hover:bg-amber-200 transition-colors"
                         title={t.sync}
                      >
-                        <ChevronDown className={`w-3.5 h-3.5 opacity-60 transition-transform ${activeMenu === 'sync' ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`w-4 h-4 opacity-70 transition-transform ${activeMenu === 'sync' ? 'rotate-180' : ''}`} />
                      </button>
                   </div>
                 ) : (
@@ -466,7 +467,7 @@ export const Bookshelf: React.FC<BookshelfProps> = ({
                                  onClick={() => { setActiveMenu(null); onConnectSync(); }}
                                  className="w-full text-left px-3 py-2 text-[13px] text-blue-600 hover:bg-blue-50 rounded-lg font-medium flex items-center gap-3 transition-colors"
                                  title="Requires Chrome/Edge/Opera"
-                               >
+                                >
                                  <Cloud className="w-4 h-4" />
                                  <span>{t.set_folder}</span>
                                </button>
